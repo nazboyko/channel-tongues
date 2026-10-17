@@ -47,3 +47,21 @@ export function isStudio(raw: string | undefined | null): boolean {
 export function studioLanguagesUrl(videoId: string): string {
   return `https://studio.youtube.com/video/${videoId}/translations`;
 }
+
+export interface TabLike {
+  id?: number;
+  url?: string;
+  active?: boolean;
+}
+
+/**
+ * The tab Open in Studio shows the page in: the active Studio tab, then the
+ * one it opened before (still open, even if Google asked to sign in there),
+ * then any other Studio tab. Null means a new tab. Another tab that is not on
+ * Studio is never taken over.
+ */
+export function pickStudioTab(tabs: TabLike[], opened: number | null): number | null {
+  const studio = tabs.filter((t) => t.id !== undefined && isStudio(t.url));
+  const pick = studio.find((t) => t.active) ?? tabs.find((t) => t.id !== undefined && t.id === opened) ?? studio[0];
+  return pick?.id ?? null;
+}

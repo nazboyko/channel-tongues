@@ -1,5 +1,65 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Channel, Health, Language } from "./lib/api";
+import { Once } from "./lib/busy";
+
+export type ButtonKind = "primary" | "secondary" | "small";
+
+/**
+ * Every action in the panel is one of three buttons: primary (filled),
+ * secondary (outlined, full width, under the primary) and small (outlined,
+ * compact, inline). One that starts work runs once: a second click while it
+ * runs does nothing, the label says what is happening, and it comes back
+ * when the work is done or failed (the screen shows the message). While busy
+ * it stays focusable (aria-disabled, not disabled), so focus is not lost.
+ */
+export function Action(props: {
+  kind: ButtonKind;
+  onRun: () => unknown;
+  children: ReactNode;
+  /** The label while the work runs, such as "Publishing…". */
+  busy?: string;
+  disabled?: boolean;
+  className?: string;
+  label?: string;
+  id?: string;
+  expanded?: boolean;
+}) {
+  const once = useRef(new Once());
+  const [busy, setBusy] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const run = () => {
+    if (props.disabled || once.current.busy) return;
+    setBusy(true);
+    once.current
+      .run(props.onRun)
+      .catch(() => undefined) // the screen shows its own message
+      .finally(() => {
+        if (mounted.current) setBusy(false);
+      });
+  };
+  const working = busy && props.busy !== undefined;
+  return (
+    <button
+      id={props.id}
+      className={props.className ? `${props.kind} ${props.className}` : props.kind}
+      disabled={props.disabled}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
+      aria-expanded={props.expanded}
+      aria-label={working ? props.busy : props.label}
+      onClick={run}
+    >
+      {working && <span className="btn-spin" aria-hidden="true" />}
+      {working ? props.busy : props.children}
+    </button>
+  );
+}
 
 /** Splits text into plain parts and marked added words (whole words, any case). */
 export function markWords(text: string, words: string[] | undefined): { text: string; added: boolean }[] {
@@ -103,21 +163,26 @@ export function Heading(props: { children: ReactNode; focus?: boolean }) {
   );
 }
 
-export function CopyCode(props: { text: string }) {
+/** "Copied" for two seconds after a copy; another click starts the two seconds again. */
+function useCopied(): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const copy = (text: string) =>
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setCopied(false), 2000);
+    });
+  return [copied, copy];
+}
+
+export function CopyCode(props: { text: string }) {
+  const [copied, copy] = useCopied();
   return (
     <div className="code">
       <span>{props.text}</span>
-      <button
-        className="link"
-        onClick={() => {
-          navigator.clipboard.writeText(props.text).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          });
-        }}
-        aria-label={`Copy the command ${props.text}`}
-      >
+      <button className="small" onClick={() => copy(props.text)} aria-label={copied ? "Copied" : `Copy the command ${props.text}`}>
         {copied ? "Copied" : "Copy"}
       </button>
     </div>
@@ -125,18 +190,9 @@ export function CopyCode(props: { text: string }) {
 }
 
 export function CopyButton(props: { text: string; label: string; what: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopied();
   return (
-    <button
-      className="link"
-      aria-label={`${props.label}: ${props.what}`}
-      onClick={() =>
-        navigator.clipboard.writeText(props.text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        })
-      }
-    >
+    <button className="small" aria-label={copied ? "Copied" : `${props.label}: ${props.what}`} onClick={() => copy(props.text)}>
       {copied ? "Copied" : props.label}
     </button>
   );
@@ -208,7 +264,7 @@ export function MoreLanguages(props: { all: Language[]; shown: Set<string>; onAd
 
   if (!open) {
     return (
-      <button ref={buttonRef} className="link" onClick={() => setOpen(true)} aria-expanded="false">
+      <button ref={buttonRef} className="small" onClick={() => setOpen(true)} aria-expanded="false">
         More languages
       </button>
     );
@@ -265,7 +321,7 @@ export function MoreLanguages(props: { all: Language[]; shown: Set<string>; onAd
           </li>
         )}
       </ul>
-      <button className="link" style={{ padding: "6px 12px" }} onClick={close}>
+      <button className="small" onClick={close}>
         Done
       </button>
     </div>
@@ -297,8 +353,8 @@ export function StatusLine(props: { health: Health | null }) {
 export function Settings(props: {
   health: Health;
   onKeepWords: (words: string[]) => Promise<void>;
-  onSignOut: (c: Channel) => void;
-  onAddChannel: () => void;
+  onSignOut: (c: Channel) => Promise<void>;
+  onAddChannel: () => Promise<void>;
 }) {
   const { health } = props;
   const [adding, setAdding] = useState("");
@@ -314,14 +370,15 @@ export function Settings(props: {
       () => setError(""),
       () => setError("That did not save. Is the helper still running?"),
     );
-  const add = () => {
+  const add = async () => {
     const w = adding.trim();
     if (!w) return;
     if (words.some((x) => x.toLowerCase() === w.toLowerCase())) {
       setAdding("");
       return;
     }
-    change([...words, w]).then(() => setAdding(""));
+    await change([...words, w]);
+    setAdding("");
   };
   return (
     <details className="settings">
@@ -351,12 +408,12 @@ export function Settings(props: {
             value={adding}
             onChange={(e) => setAdding(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") add();
+              if (e.key === "Enter") document.getElementById("add-word")?.click(); // the same guarded click
             }}
           />
-          <button className="link" onClick={add} disabled={!adding.trim()}>
+          <Action kind="small" id="add-word" busy="Adding…" onRun={add} disabled={!adding.trim()}>
             Add
-          </button>
+          </Action>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -369,15 +426,27 @@ export function Settings(props: {
             {channels.map((c) => (
               <div className="line" key={c.id}>
                 <span>{c.title}</span>
-                <button className="link" onClick={() => props.onSignOut(c)} aria-label={`Sign out ${c.title}`}>
+                <Action
+                  kind="small"
+                  busy="Signing out…"
+                  label={`Sign out ${c.title}`}
+                  onRun={() => {
+                    setError("");
+                    return props.onSignOut(c).catch(() => setError("That did not sign out. Is the helper still running?"));
+                  }}
+                >
                   Sign out
-                </button>
+                </Action>
               </div>
             ))}
             <div className="line">
-              <button className="link" onClick={props.onAddChannel}>
+              <Action
+                kind="small"
+                busy="Opening the sign-in…"
+                onRun={() => props.onAddChannel().catch(() => setError("The sign-in did not open. Is the helper still running?"))}
+              >
                 Add another channel
-              </button>
+              </Action>
             </div>
           </>
         )}

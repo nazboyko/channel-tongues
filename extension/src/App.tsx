@@ -13,10 +13,11 @@ import {
   type Video,
 } from "./lib/api";
 import { screenFor, type HealthResult } from "./lib/state";
-import { isStudio, videoIdFromUrl } from "./lib/url";
+import { isStudio, pickStudioTab, videoIdFromUrl } from "./lib/url";
 import { askStudioAccess, readFromStudio, type StudioFields } from "./lib/studio";
 import { askNative } from "./lib/native";
 import {
+  Action,
   CopyButton,
   CopyCode,
   Heading,
@@ -62,18 +63,22 @@ async function openTab(url: string) {
   }
 }
 
-/** Shows a Studio page: in the Studio tab when it is the active one, else in a new tab. */
+/** The tab Open in Studio opened last, so the next click reuses it. */
+let studioTab: number | null = null;
+
+/** Shows a Studio page in a Studio tab that is already open, else in one new tab that later clicks reuse. */
 async function openInStudio(url: string) {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id !== undefined && isStudio(tab.url)) {
-      await chrome.tabs.update(tab.id, { url });
+    const id = pickStudioTab(await chrome.tabs.query({ currentWindow: true }), studioTab);
+    if (id !== null) {
+      await chrome.tabs.update(id, { url, active: true });
+      studioTab = id;
       return;
     }
+    studioTab = (await chrome.tabs.create({ url })).id ?? null;
   } catch {
-    // fall through to a new tab
+    window.open(url, "_blank");
   }
-  openTab(url);
 }
 
 type Stage = "running" | "done" | "published";
@@ -260,10 +265,10 @@ export function App() {
           await refresh();
         }}
         onSignOut={async (c: Channel) => {
-          await api.signOut(c.id).catch(() => undefined);
+          await api.signOut(c.id);
           await refresh();
         }}
-        onAddChannel={() => signIn().catch(() => undefined)}
+        onAddChannel={signIn}
       />
     ) : null;
   const footer = (
@@ -327,8 +332,8 @@ export function App() {
       return (
         <TranslatingScreen
           job={job}
-          onCancel={() => {
-            if (job) api.cancel(job.id).catch(() => undefined);
+          onCancel={async () => {
+            if (job) await api.cancel(job.id).catch(() => undefined);
             clearJob();
           }}
           footer={<StatusLine health={h} />}
@@ -377,15 +382,15 @@ function sourceName(job: Job, languages: Language[]): string {
 }
 
 /* 1 */
-function HelperScreen(props: { onRetry: () => void }) {
+function HelperScreen(props: { onRetry: () => unknown }) {
   return (
     <Shell>
       <Heading>Start the helper to continue</Heading>
       <p>Run this in a terminal, then come back.</p>
       <CopyCode text="tongues serve" />
-      <button className="primary push" onClick={props.onRetry}>
+      <Action kind="primary" className="push" busy="Checking…" onRun={props.onRetry}>
         Try again
-      </button>
+      </Action>
     </Shell>
   );
 }
@@ -394,14 +399,12 @@ function HelperScreen(props: { onRetry: () => void }) {
 function PairScreen(props: { onPaired: () => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const submit = async () => {
     const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (clean.length !== 8) {
       setError("The code has eight letters and numbers, like ABCD-EFGH.");
       return;
     }
-    setBusy(true);
     setError("");
     const formatted = `${clean.slice(0, 4)}-${clean.slice(4)}`;
     await chrome.storage.local.set({ pairingCode: formatted });
@@ -410,8 +413,6 @@ function PairScreen(props: { onPaired: () => void }) {
       props.onPaired();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 401 ? "That code does not match. Check the terminal and try again." : messageOf(e));
-    } finally {
-      setBusy(false);
     }
   };
   return (
@@ -429,7 +430,7 @@ function PairScreen(props: { onPaired: () => void }) {
         value={code}
         onChange={(e) => setCode(e.target.value.toUpperCase())}
         onKeyDown={(e) => {
-          if (e.key === "Enter") submit();
+          if (e.key === "Enter") document.getElementById("connect")?.click(); // the same guarded click
         }}
         autoFocus
       />
@@ -438,24 +439,24 @@ function PairScreen(props: { onPaired: () => void }) {
           {error}
         </div>
       )}
-      <button className="primary push" onClick={submit} disabled={busy}>
+      <Action kind="primary" className="push" id="connect" busy="Connecting…" onRun={submit}>
         Connect
-      </button>
+      </Action>
     </Shell>
   );
 }
 
 /* 3 */
-function ModelScreen(props: { health: Health; onRetry: () => void; footer: ReactNode }) {
+function ModelScreen(props: { health: Health; onRetry: () => unknown; footer: ReactNode }) {
   const missing = props.health.model.state === "model-missing";
   return (
     <Shell footer={<StatusLine health={props.health} />}>
       <Heading>{missing ? "The model is not downloaded yet" : "Ollama is not running"}</Heading>
       <p>{missing ? "Download it once in a terminal, then come back." : "Start the Ollama app, or run this in a terminal."}</p>
       <CopyCode text={missing ? `ollama pull ${props.health.model.model}` : "ollama serve"} />
-      <button className="primary push" onClick={props.onRetry}>
+      <Action kind="primary" className="push" busy="Checking…" onRun={props.onRetry}>
         Try again
-      </button>
+      </Action>
     </Shell>
   );
 }
@@ -491,13 +492,13 @@ function SignInScreen(props: { health: Health; onSignIn: () => Promise<void>; on
           {error}
         </div>
       )}
-      <div className="push">
-        <button className="primary" onClick={signIn}>
+      <div className="actions">
+        <Action kind="primary" busy="Opening the sign-in…" onRun={signIn}>
           Sign in to publish for me
-        </button>
-        <button className="secondary" onClick={props.onPaste}>
+        </Action>
+        <Action kind="secondary" onRun={props.onPaste}>
           I'll paste it myself
-        </button>
+        </Action>
       </div>
     </Shell>
   );
@@ -570,9 +571,9 @@ function HomeScreen(props: { onPick: (id: string) => void; onSignIn: () => Promi
         </div>
       )}
       {expired && (
-        <button className="primary push" onClick={() => props.onSignIn().catch((e) => setError(messageOf(e)))}>
+        <Action kind="primary" className="push" busy="Opening the sign-in…" onRun={() => props.onSignIn().catch((e) => setError(messageOf(e)))}>
           Sign in again
-        </button>
+        </Action>
       )}
     </Shell>
   );
@@ -599,7 +600,6 @@ function PasteScreen(props: {
   const [extra, setExtra] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [filled, setFilled] = useState<"no" | "yes" | "ask">("no");
   const fill = (f: StudioFields | null) => {
     if (!f) return false;
@@ -641,16 +641,17 @@ function PasteScreen(props: {
       <Heading>{filled === "yes" ? "Check the title and description" : "Paste the title and description"}</Heading>
       <p>{filled === "yes" ? "Filled in from the Studio page. Change anything, then translate." : "Copy them from the video's Details page in Studio."}</p>
       {filled === "ask" && props.studioTab !== null && (
-        <button
-          className="link"
-          onClick={async () => {
+        <Action
+          kind="small"
+          busy="Reading…"
+          onRun={async () => {
             if ((await askStudioAccess()) && props.studioTab !== null && !fill(await readFromStudio(props.studioTab))) {
               setError("The title was not found on this page. Paste it instead.");
             }
           }}
         >
           Read them from the Studio page
-        </button>
+        </Action>
       )}
       <input className="field" aria-label="Title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <textarea
@@ -683,22 +684,18 @@ function PasteScreen(props: {
           {error}
         </div>
       )}
-      <button
-        className="primary push"
-        disabled={!title.trim() || count === 0 || busy}
-        onClick={() => {
-          setBusy(true);
+      <Action
+        kind="primary"
+        className="push"
+        busy="Starting…"
+        disabled={!title.trim() || count === 0}
+        onRun={() => {
           setError("");
-          props
-            .onTranslate(title, description, picked)
-            .catch((e) => {
-              setError(messageOf(e));
-              setBusy(false);
-            });
+          return props.onTranslate(title, description, picked).catch((e) => setError(messageOf(e)));
         }}
       >
         {count === 0 ? "Pick a language" : `Translate ${plural(count, "language")}`}
-      </button>
+      </Action>
     </Shell>
   );
 }
@@ -718,12 +715,11 @@ function VideoScreen(props: {
   const [error, setError] = useState<ApiError | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
   const [startError, setStartError] = useState("");
 
   const load = useCallback(() => {
     setError(null);
-    api.video(props.videoId).then(
+    return api.video(props.videoId).then(
       (v) => {
         setVideo(v);
         const has = new Set(v.languages.map((l) => l.code));
@@ -732,12 +728,14 @@ function VideoScreen(props: {
       (e) => setError(e instanceof ApiError ? e : new ApiError(0, "error", messageOf(e))),
     );
   }, [props.videoId]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const back = props.picked ? (
-    <button className="link" onClick={props.onBack}>
+    <Action kind="small" onRun={props.onBack}>
       Back to your videos
-    </button>
+    </Action>
   ) : null;
 
   if (error) {
@@ -746,14 +744,27 @@ function VideoScreen(props: {
         <Heading>{error.code === "notfound" ? "This video is not on your channels" : "This video could not be opened"}</Heading>
         <p>{error.message}</p>
         {back}
+        {startError && (
+          <div className="error" role="alert">
+            {startError}
+          </div>
+        )}
         {error.code === "signin" ? (
-          <button className="primary push" onClick={() => props.onSignIn().catch(() => undefined)}>
+          <Action
+            kind="primary"
+            className="push"
+            busy="Opening the sign-in…"
+            onRun={() => {
+              setStartError("");
+              return props.onSignIn().catch((e) => setStartError(messageOf(e)));
+            }}
+          >
             Sign in again
-          </button>
+          </Action>
         ) : (
-          <button className="primary push" onClick={load}>
+          <Action kind="primary" className="push" busy="Checking…" onRun={load}>
             Try again
-          </button>
+          </Action>
         )}
       </Shell>
     );
@@ -797,9 +808,9 @@ function VideoScreen(props: {
         <Heading>Set the video's language first</Heading>
         <p>In Studio: Details, Show more, Title and description language. Then press Check again.</p>
         {back}
-        <button className="primary push" onClick={load}>
+        <Action kind="primary" className="push" busy="Checking…" onRun={load}>
           Check again
-        </button>
+        </Action>
       </Shell>
     );
   }
@@ -836,22 +847,18 @@ function VideoScreen(props: {
           {startError}
         </div>
       )}
-      <button
-        className="primary push"
-        disabled={count === 0 || busy}
-        onClick={() => {
-          setBusy(true);
+      <Action
+        kind="primary"
+        className="push"
+        busy="Starting…"
+        disabled={count === 0}
+        onRun={() => {
           setStartError("");
-          props
-            .onTranslate(video, chosen)
-            .catch((e) => {
-              setStartError(messageOf(e));
-              setBusy(false);
-            });
+          return props.onTranslate(video, chosen).catch((e) => setStartError(messageOf(e)));
         }}
       >
         {count === 0 ? "Pick a language" : `Translate ${plural(count, "language")}`}
-      </button>
+      </Action>
     </Shell>
   );
 }
@@ -891,7 +898,7 @@ function StatusText(props: { lang: JobLang }) {
 }
 
 /* 7 */
-function TranslatingScreen(props: { job: Job | null; onCancel: () => void; footer: ReactNode }) {
+function TranslatingScreen(props: { job: Job | null; onCancel: () => unknown; footer: ReactNode }) {
   const langs = props.job?.languages ?? [];
   const finished = langs.filter((l) => ["ready", "check", "failed"].includes(l.status)).length;
   if (langs.length > 20) {
@@ -929,9 +936,9 @@ function TranslatingScreen(props: { job: Job | null; onCancel: () => void; foote
           {/* Spoken every ten languages, not on each one. */}
           {spoken > 0 && `${spoken} of ${langs.length} translated`}
         </p>
-        <button className="secondary push" onClick={props.onCancel}>
+        <Action kind="secondary" className="push" busy="Stopping…" onRun={props.onCancel}>
           Cancel
-        </button>
+        </Action>
       </Shell>
     );
   }
@@ -947,13 +954,13 @@ function TranslatingScreen(props: { job: Job | null; onCancel: () => void; foote
           </li>
         ))}
       </ul>
-      <div className="push">
+      <div className="actions">
         <button className="primary" disabled>
           Translating {Math.min(finished + 1, Math.max(langs.length, 1))} of {langs.length}
         </button>
-        <button className="secondary" onClick={props.onCancel}>
+        <Action kind="secondary" busy="Stopping…" onRun={props.onCancel}>
           Cancel
-        </button>
+        </Action>
       </div>
     </Shell>
   );
@@ -991,7 +998,6 @@ function ReviewScreen(props: {
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focusId, setFocusId] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const save = async (code: string) => {
@@ -1010,11 +1016,9 @@ function ReviewScreen(props: {
   const dirty = (l: JobLang) => draftOf(l).title !== l.title || draftOf(l).description !== l.description;
 
   const publish = async () => {
-    setBusy(true);
     setError("");
     for (const l of usable) {
       if (ticked.has(l.code) && dirty(l) && !(await save(l.code))) {
-        setBusy(false);
         setError("Fix the marked language first.");
         return;
       }
@@ -1029,7 +1033,6 @@ function ReviewScreen(props: {
       props.onPublished(res);
     } catch (e) {
       setError(messageOf(e));
-      setBusy(false);
     }
   };
 
@@ -1110,10 +1113,10 @@ function ReviewScreen(props: {
             {d.error}
           </div>
         )}
-        <button
-          className="link"
-          aria-expanded={showOriginal.has(l.code)}
-          onClick={() => {
+        <Action
+          kind="small"
+          expanded={showOriginal.has(l.code)}
+          onRun={() => {
             const next = new Set(showOriginal);
             if (next.has(l.code)) next.delete(l.code);
             else next.add(l.code);
@@ -1121,7 +1124,7 @@ function ReviewScreen(props: {
           }}
         >
           {showOriginal.has(l.code) ? "Hide original" : "Show original"}
-        </button>
+        </Action>
         {showOriginal.has(l.code) && (
           <div className="original">
             {props.job.sourceTitle}
@@ -1130,9 +1133,9 @@ function ReviewScreen(props: {
           </div>
         )}
         {many && expanded.has(l.code) && (
-          <button className="link" aria-expanded="true" aria-label={`Show less of ${l.english}`} onClick={() => toggleRow(l.code, false)}>
+          <Action kind="small" expanded label={`Show less of ${l.english}`} onRun={() => toggleRow(l.code, false)}>
             Show less
-          </button>
+          </Action>
         )}
       </section>
     );
@@ -1150,9 +1153,9 @@ function ReviewScreen(props: {
         // "71 ready, 14 to check · Tick all": one line, the link right after it.
         <p>
           {`${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""} · `}
-          <button className="link" onClick={tickAll}>
+          <Action kind="small" className="inline" onRun={tickAll}>
             {allTicked ? "Untick all" : "Tick all"}
-          </button>
+          </Action>
         </p>
       ) : (
         <div className="sect">
@@ -1162,9 +1165,9 @@ function ReviewScreen(props: {
               : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
           </p>
           {usable.length > 1 && (
-            <button className="link nowrap" onClick={tickAll}>
+            <Action kind="small" onRun={tickAll}>
               {allTicked ? "Untick all" : "Tick all"}
-            </button>
+            </Action>
           )}
         </div>
       )}
@@ -1213,9 +1216,9 @@ function ReviewScreen(props: {
       {failed.length > 0 && (
         <>
           <p>Could not translate: {failed.map((l) => l.name).join(", ")}.</p>
-          <button className="link" onClick={props.onStartOver}>
+          <Action kind="small" onRun={props.onStartOver}>
             Translate again
-          </button>
+          </Action>
         </>
       )}
       <div className="footer">
@@ -1224,9 +1227,9 @@ function ReviewScreen(props: {
             {error}
           </div>
         )}
-        <button className="primary" disabled={count === 0 || busy || props.videosLeft === 0} onClick={publish}>
-          {busy ? "Publishing…" : count === 0 ? "Tick a language to publish" : `Publish ${plural(count, "language")}`}
-        </button>
+        <Action kind="primary" busy="Publishing…" disabled={count === 0 || props.videosLeft === 0} onRun={publish}>
+          {count === 0 ? "Tick a language to publish" : `Publish ${plural(count, "language")}`}
+        </Action>
       </div>
     </Shell>
   );
@@ -1235,7 +1238,6 @@ function ReviewScreen(props: {
 /* 9 */
 function PublishedScreen(props: { job: Job; result: PublishResult; onStartOver: () => void; footer: ReactNode }) {
   const [undone, setUndone] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const sent = new Set(props.result.results.map((r) => r.lang));
   const notSent = props.job.languages.filter((l) => l.status === "check" && !sent.has(l.code));
@@ -1261,12 +1263,14 @@ function PublishedScreen(props: { job: Job; result: PublishResult; onStartOver: 
       <Shell footer={props.footer}>
         <Heading key="undone">Undone</Heading>
         <p>The video's translations are back to how they were.</p>
-        <button className="link" onClick={props.onStartOver}>
-          Translate again
-        </button>
-        <button className="primary push" onClick={() => openInStudio(props.result.studioUrl)}>
-          Open in Studio
-        </button>
+        <div className="actions">
+          <Action kind="primary" busy="Opening…" onRun={() => openInStudio(props.result.studioUrl)}>
+            Open in Studio
+          </Action>
+          <Action kind="secondary" onRun={props.onStartOver}>
+            Translate again
+          </Action>
+        </div>
       </Shell>
     );
   }
@@ -1293,28 +1297,26 @@ function PublishedScreen(props: { job: Job; result: PublishResult; onStartOver: 
           {error}
         </div>
       )}
-      <div className="push">
-        <button className="primary" onClick={() => openInStudio(props.result.studioUrl)}>
+      <div className="actions">
+        <Action kind="primary" busy="Opening…" onRun={() => openInStudio(props.result.studioUrl)}>
           Open in Studio
-        </button>
+        </Action>
         {props.result.backupId && (
-          <button
-            className="secondary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
+          <Action
+            kind="secondary"
+            busy="Undoing…"
+            onRun={async () => {
+              setError("");
               try {
                 await api.restore(props.result.videoId, props.result.backupId);
                 setUndone(true);
               } catch (e) {
                 setError(messageOf(e));
-              } finally {
-                setBusy(false);
               }
             }}
           >
             Undo
-          </button>
+          </Action>
         )}
       </div>
     </Shell>
@@ -1370,18 +1372,18 @@ function CopyScreen(props: { job: Job; sourceName: string; health: Health; onSig
           </div>
         )}
         {folder ? (
-          <button className="primary" onClick={() => api.openFolder(folder).catch((e) => setError(messageOf(e)))}>
+          <Action kind="primary" busy="Opening…" onRun={() => api.openFolder(folder).catch((e) => setError(messageOf(e)))}>
             Open folder
-          </button>
+          </Action>
         ) : (
-          <button className="primary" onClick={saveAll}>
+          <Action kind="primary" busy="Saving…" onRun={saveAll}>
             Save all to a folder
-          </button>
+          </Action>
         )}
         {props.health.canSignIn && (
-          <button className="secondary" onClick={props.onSignIn}>
+          <Action kind="secondary" onRun={props.onSignIn}>
             Sign in to publish next time
-          </button>
+          </Action>
         )}
       </div>
     </Shell>

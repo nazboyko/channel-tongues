@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStudio, studioLanguagesUrl, videoIdFromUrl } from "./url";
+import { isStudio, pickStudioTab, studioLanguagesUrl, videoIdFromUrl } from "./url";
 
 describe("videoIdFromUrl", () => {
   const id = "AbC_12-xyz9";
@@ -45,3 +45,26 @@ describe("studioLanguagesUrl", () => {
     expect(studioLanguagesUrl("AbC_12-xyz9")).toBe("https://studio.youtube.com/video/AbC_12-xyz9/translations");
   });
 });
+
+describe("pickStudioTab", () => {
+  const studio = "https://studio.youtube.com/video/AbC_12-xyz9/edit";
+  const other = "https://example.com/";
+  it("uses the active Studio tab", () => {
+    expect(pickStudioTab([{ id: 1, url: studio }, { id: 2, url: studio, active: true }], 1)).toBe(2);
+  });
+  it("then the tab it opened before, so a second click does not open another", () => {
+    expect(pickStudioTab([{ id: 1, url: studio }, { id: 3, url: studio }, { id: 4, url: other, active: true }], 3)).toBe(3);
+  });
+  it("then any Studio tab", () => {
+    expect(pickStudioTab([{ id: 5, url: other, active: true }, { id: 6, url: studio }], null)).toBe(6);
+  });
+  it("reuses the tab it opened even when Google asked to sign in there", () => {
+    expect(pickStudioTab([{ id: 3, url: "https://accounts.google.com/v3/signin/identifier" }, { id: 4, url: other, active: true }], 3)).toBe(3);
+  });
+  it("never takes over another tab that is not on Studio", () => {
+    expect(pickStudioTab([{ id: 3, url: other, active: true }], null)).toBeNull();
+    expect(pickStudioTab([{ id: 3, url: other }], 7)).toBeNull(); // the one it opened was closed
+    expect(pickStudioTab([], null)).toBeNull();
+  });
+});
+

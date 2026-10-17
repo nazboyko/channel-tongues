@@ -14,6 +14,12 @@
   --check: #f2c94c;
   --error: #eb5757;
   --field: #0e1627;
+  /* Button states: the lantern a shade lighter on hover, darker pressed; the
+     outlined kinds take a wash of the text color. */
+  --accent-hover: #f6c487;
+  --accent-press: #e29a43;
+  --wash: rgba(232, 236, 244, 0.08);
+  --wash-press: rgba(232, 236, 244, 0.16);
   --radius: 8px;
   --pad: 12px;
   color-scheme: dark;
@@ -33,6 +39,10 @@
     --check: #8a6700;
     --error: #c0392b;
     --field: #ffffff;
+    --accent-hover: #83500f;
+    --accent-press: #6b410c;
+    --wash: rgba(27, 36, 50, 0.06);
+    --wash-press: rgba(27, 36, 50, 0.12);
     color-scheme: light;
   }
 }
@@ -188,49 +198,134 @@ p {
   color: var(--muted);
 }
 
-.link {
-  background: none;
-  border: 0;
-  color: var(--accent);
+/* Three kinds of button and nothing that looks like plain text: primary
+   (filled), secondary (outlined, full width, under the primary) and small
+   (outlined, compact, inline). The outline is the muted text color, at least
+   3:1 on the surface in both themes. */
+.primary,
+.secondary,
+.small {
   font: inherit;
-  font-size: 12px;
-  padding: 2px 0;
+  border-radius: var(--radius);
   cursor: pointer;
-  text-align: left;
-  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    background-color 120ms,
+    border-color 120ms;
 }
 
 .primary {
   background: var(--accent);
   color: var(--accent-ink);
-  border: 0;
-  border-radius: var(--radius);
+  border: 1px solid var(--accent);
   padding: 11px 14px;
-  font: inherit;
   font-weight: 600;
   font-size: 14px;
-  cursor: pointer;
   width: 100%;
 }
 
-.primary:disabled {
+.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--muted);
+  padding: 10px 14px;
+  font-weight: 500;
+  font-size: 14px;
+  width: 100%;
+}
+
+.small {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.primary:hover:not(:disabled, [aria-busy="true"]) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.primary:active:not(:disabled, [aria-busy="true"]) {
+  background: var(--accent-press);
+  border-color: var(--accent-press);
+}
+
+.secondary:hover:not(:disabled, [aria-busy="true"]),
+.small:hover:not(:disabled, [aria-busy="true"]) {
+  background: var(--wash);
+  border-color: var(--text);
+}
+
+.secondary:active:not(:disabled, [aria-busy="true"]),
+.small:active:not(:disabled, [aria-busy="true"]) {
+  background: var(--wash-press);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.small:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* Working: the label says what is happening; the button stays readable. */
+[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  animation: spin 0.8s linear infinite;
 }
 
 .push {
   margin-top: auto;
 }
 
-.secondary {
-  background: none;
-  border: 0;
-  color: var(--muted);
-  font: inherit;
-  padding: 8px;
-  cursor: pointer;
-  text-align: center;
-  width: 100%;
+/* A primary with its secondary under it, at the bottom of the screen. */
+.actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A small button inside a line of text ("71 ready · Tick all"). */
+.small.inline {
+  display: inline-flex;
+  vertical-align: baseline;
+  padding: 1px 8px;
+}
+
+/* Rows that open something take the same hover and pressed wash. */
+button.row:hover,
+.compact-open:hover {
+  background-image: linear-gradient(var(--wash), var(--wash));
+}
+
+button.row:active,
+.compact-open:active {
+  background-image: linear-gradient(var(--wash-press), var(--wash-press));
+}
+
+.chip:not([aria-pressed="true"]):hover {
+  border-color: var(--text);
 }
 
 .footer {
@@ -240,7 +335,7 @@ p {
   padding-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .rows {
@@ -462,7 +557,7 @@ textarea.field {
   gap: 8px;
 }
 
-.code .link {
+.code .small {
   font-family: Inter, system-ui, sans-serif;
   align-self: center;
 }
