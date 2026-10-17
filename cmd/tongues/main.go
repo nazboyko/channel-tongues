@@ -51,6 +51,9 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	if strings.HasPrefix(args[0], "chrome-extension://") {
+		return runNativeHost(cfg, args[0]) // started by Chrome for the side panel
+	}
 	for _, c := range commands {
 		if c.name != args[0] {
 			continue

@@ -30,7 +30,8 @@
     "tabs",
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "http://127.0.0.1:7312/*"

@@ -15,6 +15,7 @@ import {
 import { screenFor, type HealthResult } from "./lib/state";
 import { isStudio, videoIdFromUrl } from "./lib/url";
 import { askStudioAccess, readFromStudio, type StudioFields } from "./lib/studio";
+import { askNative } from "./lib/native";
 import {
   CopyButton,
   CopyCode,
@@ -101,13 +102,29 @@ export function App() {
   const videoId = pickedVideo ?? tabVideo;
   const h = health.kind === "ok" ? health.health : null;
 
+  // When the helper is down or the code is missing, ask Chrome's native
+  // host once to start it and hand over the code. Without the host (setup
+  // not run) the panel shows the command or the code field instead.
+  const nativeTried = useRef<{ start: boolean; code: boolean }>({ start: false, code: false });
+  const [starting, setStarting] = useState(false);
   const refresh = useCallback(async () => {
     try {
       const next = await api.health();
       setHealth({ kind: "ok", health: next });
     } catch (e) {
-      if (e instanceof ApiError && (e.code === "pair" || e.status === 401 || e.status === 429)) setHealth({ kind: "unpaired" });
-      else setHealth({ kind: "down" });
+      const unpaired = e instanceof ApiError && (e.code === "pair" || e.status === 401 || e.status === 429);
+      const which = unpaired ? "code" : "start";
+      if (!overridePort && !nativeTried.current[which]) {
+        nativeTried.current[which] = true;
+        setStarting(which === "start");
+        const reply = await askNative(which);
+        setStarting(false);
+        if (reply?.code) {
+          await chrome.storage.local.set({ pairingCode: reply.code });
+          if (reply.running) return refresh();
+        }
+      }
+      setHealth({ kind: unpaired ? "unpaired" : "down" });
     }
   }, []);
 
@@ -257,9 +274,16 @@ export function App() {
 
   switch (screen) {
     case "loading":
-      return <Shell>{null}</Shell>;
+      return <Shell>{starting && <p role="status">Starting the helper…</p>}</Shell>;
     case "helper":
-      return <HelperScreen onRetry={refresh} />;
+      return (
+        <HelperScreen
+          onRetry={() => {
+            nativeTried.current.start = false; // the host may have been installed since
+            return refresh();
+          }}
+        />
+      );
     case "pair":
       return <PairScreen onPaired={refresh} />;
     case "model":

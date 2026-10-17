@@ -30,6 +30,8 @@ type setupEnv struct {
 	pull      func(ctx context.Context, model string) error
 	signIn    func(ctx context.Context, a *youtube.Auth) (youtube.Channel, error)
 	poll      time.Duration
+	// install writes the native messaging host manifest (nil: skipped).
+	install func(dirs []string) ([]string, error)
 }
 
 func runSetup(cfg *config.Config, args []string) error {
@@ -52,7 +54,8 @@ func runSetup(cfg *config.Config, args []string) error {
 		signIn: func(ctx context.Context, a *youtube.Auth) (youtube.Channel, error) {
 			return signIn(ctx, a, *noBrowser)
 		},
-		poll: 2 * time.Second,
+		poll:    2 * time.Second,
+		install: installNativeHost,
 	}
 	if *noBrowser {
 		env.open = func(string) error { return errors.New("not opening") }
@@ -60,6 +63,13 @@ func runSetup(cfg *config.Config, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	return setup(ctx, cfg, env)
+}
+
+func (e *setupEnv) installHost(dirs []string) ([]string, error) {
+	if e.install == nil {
+		return nil, nil
+	}
+	return e.install(dirs)
 }
 
 func (e *setupEnv) say(format string, a ...any) { fmt.Fprintf(e.out, format+"\n", a...) }
@@ -208,6 +218,12 @@ func setup(ctx context.Context, cfg *config.Config, e *setupEnv) error {
 		e.say("2. Click Load unpacked and pick the extension/dist folder of Channel Tongues (run make build first).")
 	}
 	e.say("3. Pin Channel Tongues in the toolbar, open a video in Studio and click the icon.")
+	written, err := e.installHost(nativeHostDirs())
+	if err == nil && len(written) > 0 {
+		e.say("\nChrome can now start the helper by itself when you open the panel; there is nothing to run.")
+		e.say("(If the panel ever asks for a code, it is %s.)", code)
+		return nil
+	}
 	e.say("   The panel asks once for this code: %s", code)
 	e.say("\nFrom now on, start the helper when you work in Studio: tongues serve")
 	return nil

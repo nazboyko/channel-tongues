@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 func runServe(cfg *config.Config, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	mock := fs.Bool("mock", false, "sample videos and recorded translations, no YouTube and no Ollama (for trying the panel)")
+	quitIdle := fs.Bool("quit-when-idle", false, "stop after two hours without a request (used when the panel starts the helper)")
 	if _, err := parseArgs(fs, args); err != nil {
 		return err
 	}
@@ -39,7 +41,16 @@ func runServe(cfg *config.Config, args []string) error {
 		}
 		return err
 	}
-	httpSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	var lastRequest atomic.Int64
+	lastRequest.Store(time.Now().Unix())
+	handler := srv.Handler()
+	httpSrv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			lastRequest.Store(time.Now().Unix())
+			handler.ServeHTTP(w, r)
+		}),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -67,7 +78,24 @@ func runServe(cfg *config.Config, args []string) error {
 
 	errc := make(chan error, 1)
 	go func() { errc <- httpSrv.Serve(ln) }()
+	idle := make(chan struct{})
+	if *quitIdle {
+		go func() {
+			for range time.Tick(time.Minute) {
+				if time.Since(time.Unix(lastRequest.Load(), 0)) > 2*time.Hour {
+					close(idle)
+					return
+				}
+			}
+		}()
+	}
 	select {
+	case <-idle:
+		a.Log.Info("helper stopped after two idle hours")
+		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		httpSrv.Shutdown(shutdown)
+		return nil
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()

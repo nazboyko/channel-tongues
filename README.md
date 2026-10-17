@@ -15,14 +15,11 @@ You need a Mac or Linux machine with Chrome, Go 1.26 and Node 26.
    ```
    git clone https://github.com/nazboyko/channel-tongues && cd channel-tongues && make build
    ```
-3. Run the setup. It downloads the model, walks you through your own Google project if you want Channel Tongues to publish for you, and shows how to load the extension:
+3. Run the setup. It downloads the model, walks you through your own Google project if you want Channel Tongues to publish for you, shows how to load the extension, and lets Chrome start the helper for you:
    ```
    bin/tongues setup
    ```
-4. Start the helper whenever you work in Studio, then open a video there and click the Channel Tongues icon:
-   ```
-   bin/tongues serve
-   ```
+4. Open a video in YouTube Studio and click the Channel Tongues icon. The panel starts the helper by itself. (Without step 3's Chrome connection, run `bin/tongues serve` first.)
 
 Translating works without any Google sign-in: choose "I'll paste it myself" in the panel (on a Studio video page it fills in the title and description for you), then copy the results or save them to a folder.
 
@@ -51,8 +48,8 @@ Publishing reads the video first and merges: languages the video lacks are added
 |---|---|---|
 | Your Google account | Nothing | A sign-in to **your own** Google Cloud project, created by you during setup. No billing account. |
 | Where the sign-in lives | Nowhere | A file in the helper's data folder on your disk, readable only by your user. Sign out in the panel removes it and tells Google; you can also revoke it at [myaccount.google.com/permissions](https://myaccount.google.com/permissions). |
-| What the extension can do | Chrome permissions `sidePanel`, `tabs`, `storage`, `activeTab`, `scripting` and talking to `127.0.0.1:7312`. On the paste screen it reads the title and description from the open Studio page (read only); if Chrome asks, that is for read access to Studio pages, and you can say no and paste instead | The same |
-| The helper | Listens on 127.0.0.1 only, answers only the extension, asks for the pairing code on every request, checks the Host header | The same, plus it writes to your videos when you press Publish |
+| What the extension can do | Chrome permissions `sidePanel`, `tabs`, `storage`, `activeTab`, `scripting`, `nativeMessaging` (to start the helper) and talking to `127.0.0.1:7312`. On the paste screen it reads the title and description from the open Studio page (read only); if Chrome asks, that is for read access to Studio pages, and you can say no and paste instead | The same |
+| The helper | Listens on 127.0.0.1 only, answers only the extension, asks for the pairing code on every request, checks the Host header. Chrome starts it through a native messaging manifest that names only this extension; it stops after two idle hours | The same, plus it writes to your videos when you press Publish |
 | Your text | Stays on your machine; Gemma runs there | The final translations go to YouTube, nothing else goes anywhere |
 
 YouTube offers no "translations only" permission, so the sign-in is broad (`youtube.force-ssl`). The code, the log of every write (`tongues.log` in the data folder) and the backup taken before every write are how you can check what Channel Tongues does with it.
