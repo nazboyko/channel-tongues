@@ -205,7 +205,7 @@ func runTranslate(cfg *config.Config, args []string) error {
 	printResults(results, *f.full, src.text.Language)
 	if measuring {
 		printMeasure(results, wall, eng, *f.cold)
-		c := costOf(results, wall, *f.cold)
+		c := costOf(src.text, results, wall, *f.cold)
 		c.Machine, c.Power = readMachine(), power
 		if o != nil {
 			if info, err := o.Info(ctx); err == nil {

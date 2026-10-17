@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nazboyko/channel-tongues/internal/langs"
 	"github.com/nazboyko/channel-tongues/internal/translate"
@@ -25,12 +26,30 @@ type runCost struct {
 	Machine          machineInfo          `json:"machine"`
 	Model            *translate.ModelInfo `json:"model,omitempty"`
 	Mode             string               `json:"mode"` // "cold" or "warm"
+	Source           sourceLength         `json:"source"`
 	Seconds          float64              `json:"seconds"`
 	ModelLoadSeconds float64              `json:"modelLoadSeconds,omitempty"` // cold runs only
 	Translation      callTotals           `json:"translation"`                // translate calls and the language check
 	ReadBack         callTotals           `json:"readBack"`                   // the back-translation and the word check
+	Outcome          outcome              `json:"outcome"`
 	Languages        []langCost           `json:"languages"`
 	Power            *powerUse            `json:"power,omitempty"`
+}
+
+// sourceLength is the text translated, in characters as YouTube counts them.
+type sourceLength struct {
+	TitleChars       int `json:"titleChars"`
+	DescriptionChars int `json:"descriptionChars"`
+}
+
+// outcome counts what the checks did in the run.
+type outcome struct {
+	Ready             int `json:"ready"`
+	ToCheck           int `json:"toCheck"`
+	Retries           int `json:"retries"`
+	TitleTooLongFirst int `json:"titleTooLongFirst"` // first answers whose title was over 100 characters
+	ReadBackTitle     int `json:"readBackTitle"`     // cards unticked by a word the read-back added to the title
+	ReadBackLineOnly  int `json:"readBackLineOnly"`  // marked in the description only
 }
 
 type langCost struct {
@@ -69,9 +88,12 @@ func (t *callTotals) merge(o callTotals) {
 	}
 }
 
-// costOf adds up the model calls of every language.
-func costOf(results []translate.Result, wall time.Duration, cold bool) runCost {
-	c := runCost{Mode: "warm", Seconds: wall.Seconds(), Languages: []langCost{}}
+// costOf adds up the model calls and the checks of every language.
+func costOf(src translate.Source, results []translate.Result, wall time.Duration, cold bool) runCost {
+	c := runCost{Mode: "warm", Seconds: wall.Seconds(), Languages: []langCost{}, Source: sourceLength{
+		TitleChars:       utf8.RuneCountInString(strings.TrimSpace(src.Title)),
+		DescriptionChars: utf8.RuneCountInString(strings.ReplaceAll(src.Description, "\r\n", "\n")),
+	}}
 	if cold {
 		c.Mode = "cold"
 	}
@@ -89,6 +111,23 @@ func costOf(results []translate.Result, wall time.Duration, cold bool) runCost {
 		c.Translation.merge(lc.Translation)
 		c.ReadBack.merge(lc.ReadBack)
 		c.Languages = append(c.Languages, lc)
+		switch r.Status {
+		case translate.StatusReady:
+			c.Outcome.Ready++
+		case translate.StatusCheck:
+			c.Outcome.ToCheck++
+		}
+		c.Outcome.Retries += r.Retries
+		// Problems are kept in order, so the first one is the first answer's.
+		if r.Retries > 0 && len(r.Problems) > 0 && strings.HasPrefix(r.Problems[0], translate.TitleTooLong) {
+			c.Outcome.TitleTooLongFirst++
+		}
+		switch {
+		case len(r.AddedTitle) > 0:
+			c.Outcome.ReadBackTitle++
+		case len(r.AddedLine) > 0:
+			c.Outcome.ReadBackLineOnly++
+		}
 	}
 	if cold {
 		c.ModelLoadSeconds = load.Seconds()
@@ -249,11 +288,15 @@ func printCost(c runCost) {
 		}
 		fmt.Println(line)
 	}
+	fmt.Printf("  Text: title %d characters, description %d characters\n", c.Source.TitleChars, c.Source.DescriptionChars)
 	run := fmt.Sprintf("  Run: %s, %d languages, %.1f s", c.Mode, len(c.Languages), c.Seconds)
 	if c.Mode == "cold" {
 		run += fmt.Sprintf(", of which loading the model %.1f s", c.ModelLoadSeconds)
 	}
 	fmt.Println(run)
+	o := c.Outcome
+	fmt.Printf("  Checks: %d ready, %d to check; %d retries, %d of them for a first title over 100 characters; read-back marked %d titles (unticked) and %d descriptions only\n",
+		o.Ready, o.ToCheck, o.Retries, o.TitleTooLongFirst, o.ReadBackTitle, o.ReadBackLineOnly)
 	fmt.Println()
 	fmt.Printf("  %-28s %-29s   %s\n", "", "translating and checking", "read-back")
 	fmt.Printf("  %-28s %7s %7s %6s %6s   %9s %7s %6s %6s\n", "Language", "s", "in tok", "out", "tok/s", "s", "in tok", "out", "tok/s")

@@ -213,13 +213,16 @@ func restoredLength(s string, spans []Span) int {
 	return utf8.RuneCountInString(p.Restore(s))
 }
 
+// TitleTooLong starts the reason of the title-length check, for counting it.
+const TitleTooLong = "the title is "
+
 func checkTitleLength(title string, spans []Span) *Problem {
 	n := restoredLength(title, spans)
 	if n <= MaxTitle {
 		return nil
 	}
 	return &Problem{
-		Reason:   fmt.Sprintf("the title is %d characters, YouTube allows %d", n, MaxTitle),
+		Reason:   fmt.Sprintf(TitleTooLong+"%d characters, YouTube allows %d", n, MaxTitle),
 		Feedback: fmt.Sprintf("The title is %d characters long. Rewrite it in at most %d characters, keeping its meaning and every placeholder.", n, MaxTitle-5),
 		Shorten:  true,
 	}

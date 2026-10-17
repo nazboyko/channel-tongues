@@ -25,7 +25,7 @@ func TestCostAddsTranslationAndReadBackApart(t *testing.T) {
 			call(translate.CallTranslate, 800, 140, 1800*time.Millisecond, 0),
 		}},
 	}
-	c := costOf(results, 5*time.Second, true)
+	c := costOf(translate.Source{Title: "Rain · 3 Hours 🌧", Description: "One\r\nTwo"}, results, 5*time.Second, true)
 	if c.Mode != "cold" || c.Seconds != 5 || c.ModelLoadSeconds != 4 || len(c.Languages) != 2 {
 		t.Fatalf("got %+v", c)
 	}
@@ -40,7 +40,10 @@ func TestCostAddsTranslationAndReadBackApart(t *testing.T) {
 	if c.Translation.OutputTokens != 300 || math.Abs(c.Translation.TokensPerSecond-300/4.0) > 0.01 || c.ReadBack.Calls != 2 {
 		t.Fatalf("totals %+v %+v", c.Translation, c.ReadBack)
 	}
-	if warm := costOf(results, 5*time.Second, false); warm.Mode != "warm" || warm.ModelLoadSeconds != 0 {
+	if c.Source.TitleChars != 16 || c.Source.DescriptionChars != 7 {
+		t.Fatalf("lengths in characters, not bytes: %+v", c.Source)
+	}
+	if warm := costOf(translate.Source{}, results, 5*time.Second, false); warm.Mode != "warm" || warm.ModelLoadSeconds != 0 {
 		t.Fatalf("a warm run has no load time: %+v", warm)
 	}
 }
@@ -81,5 +84,18 @@ func TestSummarizePower(t *testing.T) {
 	var none *powerMeter
 	if none.stop(10) != nil {
 		t.Fatal("without macmon the meter does nothing")
+	}
+}
+
+func TestCostCountsWhatTheChecksDid(t *testing.T) {
+	results := []translate.Result{
+		{Lang: "es", Status: translate.StatusReady, Retries: 1, Problems: []string{"the title is 106 characters, YouTube allows 100"}},
+		{Lang: "de", Status: translate.StatusReady, Retries: 1, Problems: []string{"a placeholder is missing", "the title is 104 characters, YouTube allows 100"}},
+		{Lang: "ja", Status: translate.StatusCheck, AddedTitle: []string{"pleasant"}, Problems: []string{"adds: pleasant"}},
+		{Lang: "hi", Status: translate.StatusReady, AddedLine: []string{"through"}, Problems: []string{"adds: through"}},
+	}
+	o := costOf(translate.Source{}, results, time.Second, false).Outcome
+	if o.Ready != 3 || o.ToCheck != 1 || o.Retries != 2 || o.TitleTooLongFirst != 1 || o.ReadBackTitle != 1 || o.ReadBackLineOnly != 1 {
+		t.Fatalf("got %+v", o)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nazboyko/channel-tongues/internal/config"
 	"github.com/nazboyko/channel-tongues/internal/langs"
@@ -125,6 +126,7 @@ func runChannelScan(cfg *config.Config, args []string) error {
 	mock := fs.Bool("mock", false, "use the bundled sample videos")
 	only := fs.String("channel", "", "only this channel (id or name)")
 	limit := fs.Int("limit", 0, "only the latest N videos")
+	measure := fs.Bool("measure", false, "also print each video's id and the length of its title and description, for the notes")
 	if _, err := parseArgs(fs, args); err != nil {
 		return err
 	}
@@ -150,12 +152,12 @@ func runChannelScan(cfg *config.Config, args []string) error {
 		if err != nil {
 			return friendly(err)
 		}
-		printScan(ch, vids)
+		printScan(ch, vids, *measure)
 	}
 	return nil
 }
 
-func printScan(ch youtube.Channel, vids []*youtube.Video) {
+func printScan(ch youtube.Channel, vids []*youtube.Video, measure bool) {
 	complete := 0
 	for _, v := range vids {
 		if len(missingPopular(v)) == 0 {
@@ -181,6 +183,9 @@ func printScan(ch youtube.Channel, vids []*youtube.Video) {
 			state = fmt.Sprintf("missing %d: %s", len(missing), strings.Join(missing, " "))
 		}
 		fmt.Printf("  %s  %s\n", pad(truncate(v.Title, 46), 46), state)
+		if measure {
+			fmt.Printf("  %s  %s · title %d, description %d characters\n", pad("", 46), v.ID, utf8.RuneCountInString(v.Title), utf8.RuneCountInString(v.Description))
+		}
 	}
 }
 
