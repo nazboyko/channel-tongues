@@ -20,11 +20,12 @@ type Store struct {
 	db *sql.DB
 }
 
-// migrations run in order; each entry is applied once.
+// migrations run in order; each entry is applied once. They are written to be
+// safe to run twice, in case two processes open a new database together.
 var migrations = []string{
-	`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-	 CREATE TABLE keep_words (word TEXT PRIMARY KEY COLLATE NOCASE, added_at TEXT NOT NULL);
-	 CREATE TABLE jobs (
+	`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+	 CREATE TABLE IF NOT EXISTS keep_words (word TEXT PRIMARY KEY COLLATE NOCASE, added_at TEXT NOT NULL);
+	 CREATE TABLE IF NOT EXISTS jobs (
 		id TEXT PRIMARY KEY,
 		video_id TEXT NOT NULL,
 		created_at TEXT NOT NULL,
@@ -34,7 +35,7 @@ var migrations = []string{
 		source_description TEXT NOT NULL DEFAULT '',
 		languages TEXT NOT NULL DEFAULT ''
 	 );
-	 CREATE TABLE translations (
+	 CREATE TABLE IF NOT EXISTS translations (
 		job_id TEXT NOT NULL,
 		lang TEXT NOT NULL,
 		status TEXT NOT NULL,
@@ -47,7 +48,7 @@ var migrations = []string{
 		updated_at TEXT NOT NULL,
 		PRIMARY KEY (job_id, lang)
 	 );
-	 CREATE TABLE history (
+	 CREATE TABLE IF NOT EXISTS history (
 		video_id TEXT NOT NULL,
 		lang TEXT NOT NULL,
 		title TEXT NOT NULL,
@@ -56,8 +57,8 @@ var migrations = []string{
 		backup_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (video_id, lang)
 	 );
-	 CREATE TABLE quota (day TEXT PRIMARY KEY, units INTEGER NOT NULL);
-	 CREATE TABLE cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, fetched_at TEXT NOT NULL);`,
+	 CREATE TABLE IF NOT EXISTS quota (day TEXT PRIMARY KEY, units INTEGER NOT NULL);
+	 CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, fetched_at TEXT NOT NULL);`,
 }
 
 // Open opens (and creates) the database at path and applies migrations.
@@ -65,7 +66,7 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -86,13 +87,11 @@ func (s *Store) migrate() error {
 	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`); err != nil {
 		return err
 	}
+	if _, err := s.db.Exec(`INSERT INTO schema_version (version) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM schema_version)`); err != nil {
+		return err
+	}
 	var v int
-	err := s.db.QueryRow(`SELECT version FROM schema_version`).Scan(&v)
-	if errors.Is(err, sql.ErrNoRows) {
-		if _, err := s.db.Exec(`INSERT INTO schema_version (version) VALUES (0)`); err != nil {
-			return err
-		}
-	} else if err != nil {
+	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&v); err != nil {
 		return err
 	}
 	for i := v; i < len(migrations); i++ {

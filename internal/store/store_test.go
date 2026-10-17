@@ -110,3 +110,11 @@ func TestHistory(t *testing.T) {
 		t.Fatalf("after forget: %+v", h)
 	}
 }
+
+func TestOpenPathWithPercentAndSpace(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "odd 100% name", "tongues.db"))
+	if err != nil {
+		t.Fatalf("a data folder with %% or spaces must open: %v", err)
+	}
+	s.Close()
+}

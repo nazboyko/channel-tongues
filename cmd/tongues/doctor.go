@@ -6,13 +6,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/nazboyko/channel-tongues/internal/config"
 	"github.com/nazboyko/channel-tongues/internal/translate"
+	"github.com/nazboyko/channel-tongues/internal/youtube"
 )
 
 // check is one line of the doctor report. fix is empty when all is well.
@@ -41,6 +41,9 @@ func runDoctor(cfg *config.Config, args []string) error {
 		}
 	}
 	fmt.Println()
+	if g := cfg.GuardLine(); g != "" {
+		fmt.Println(g)
+	}
 	if problems == 0 {
 		fmt.Println("Everything is in place.")
 	} else {
@@ -64,14 +67,15 @@ func doctorChecks(ctx context.Context, cfg *config.Config) []check {
 		out = append(out, check{"Google project", "not set up (only needed to publish)", "Run: tongues setup"})
 	}
 
-	tokens, _ := filepath.Glob(cfg.Path("tokens", "*.json"))
-	switch len(tokens) {
-	case 0:
+	chans, _ := (&youtube.Auth{DataDir: cfg.DataDir}).Channels()
+	if len(chans) == 0 {
 		out = append(out, check{"Signed in", "no channel yet (only needed to publish)", "Run: tongues auth"})
-	case 1:
-		out = append(out, check{"Signed in", "1 channel", ""})
-	default:
-		out = append(out, check{"Signed in", fmt.Sprintf("%d channels", len(tokens)), ""})
+	} else {
+		names := make([]string, len(chans))
+		for i, c := range chans {
+			names[i] = c.Title
+		}
+		out = append(out, check{"Signed in", strings.Join(names, ", "), ""})
 	}
 
 	state, _ := translate.NewOllama(cfg.OllamaURL, cfg.Model).Health(ctx)
