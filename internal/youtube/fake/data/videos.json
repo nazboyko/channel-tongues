@@ -1,0 +1,96 @@
+[
+  {
+    "kind": "youtube#video",
+    "id": "mockRain001",
+    "snippet": {
+      "publishedAt": "2026-10-14T21:00:00Z",
+      "channelId": "UCmockSlowNightHours01",
+      "channelTitle": "The Slow Night Hours",
+      "title": "Rain on a Cabin Window at Night · 3 Hours of Sleep Sounds",
+      "description": "Three hours of soft rain on a wooden cabin window, recorded on a quiet autumn night. No ads in the middle of the video.\n\n0:00 Rain begins\n1:30:00 Distant thunder\n2:45:00 The rain slows down\n\nMore nights at https://www.youtube.com/@theslownighthours\n#sleepsounds #rainsounds",
+      "tags": ["rain sounds", "sleep", "cabin"],
+      "categoryId": "10",
+      "liveBroadcastContent": "none",
+      "defaultLanguage": "en",
+      "defaultAudioLanguage": "zxx",
+      "localized": { "title": "Rain on a Cabin Window at Night · 3 Hours of Sleep Sounds", "description": "" }
+    },
+    "localizations": {
+      "de": { "title": "Regen am Fenster einer Hütte bei Nacht · 3 Stunden Schlafgeräusche", "description": "Drei Stunden sanfter Regen am Fenster einer Holzhütte, aufgenommen in einer ruhigen Herbstnacht. Keine Werbung mitten im Video.\n\n0:00 Der Regen beginnt\n1:30:00 Fernes Donnern\n2:45:00 Der Regen lässt nach\n\nMehr Nächte auf https://www.youtube.com/@theslownighthours\n#sleepsounds #rainsounds" },
+      "fr": { "title": "Pluie sur la fenêtre d'un chalet la nuit · 3 heures de sons pour dormir", "description": "Trois heures de pluie douce sur la fenêtre d'un chalet en bois, enregistrées par une nuit d'automne tranquille. Pas de publicité au milieu de la vidéo.\n\n0:00 La pluie commence\n1:30:00 Tonnerre lointain\n2:45:00 La pluie ralentit\n\nPlus de nuits sur https://www.youtube.com/@theslownighthours\n#sleepsounds #rainsounds" }
+    }
+  },
+  {
+    "kind": "youtube#video",
+    "id": "mockPorch02",
+    "snippet": {
+      "publishedAt": "2026-10-12T21:00:00Z",
+      "channelId": "UCmockSlowNightHours01",
+      "channelTitle": "The Slow Night Hours",
+      "title": "Autumn Porch Lantern · Wet Leaves · 3 Hours",
+      "description": "A lantern glows on a wooden porch while wet leaves drift down in the dark. Gentle wind, light rain, no music.\n\nListen with headphones for the best sleep.\n#autumnambience #sleepsounds",
+      "categoryId": "10",
+      "liveBroadcastContent": "none",
+      "defaultLanguage": "en",
+      "localized": { "title": "Autumn Porch Lantern · Wet Leaves · 3 Hours", "description": "" }
+    }
+  },
+  {
+    "kind": "youtube#video",
+    "id": "mockHarbor3",
+    "snippet": {
+      "publishedAt": "2026-10-13T08:00:00Z",
+      "channelId": "UCmockLivingPostcard02",
+      "channelTitle": "The Living Postcard",
+      "title": "Morning Harbor · Gulls and Light Waves",
+      "description": "A small fishing harbor wakes up: gulls call, boats knock against the pier and light waves roll in.\n\n0:00 First light\n12:40 Boats leave the harbor\n41:05 Midday calm\n\nFilmed and recorded by @thelivingpostcard. Questions: hello@example.com\n#harbor #oceansounds #livingpostcard",
+      "categoryId": "19",
+      "liveBroadcastContent": "none",
+      "defaultLanguage": "en",
+      "localized": { "title": "Morning Harbor · Gulls and Light Waves", "description": "" }
+    }
+  },
+  {
+    "kind": "youtube#video",
+    "id": "mockOrchard",
+    "snippet": {
+      "publishedAt": "2026-10-10T08:00:00Z",
+      "channelId": "UCmockLivingPostcard02",
+      "channelTitle": "The Living Postcard",
+      "title": "Sunlit Orchard Path · Spring Breeze",
+      "description": "A path through a blooming orchard on a sunny spring morning. Birdsong and a soft breeze.\n#springambience",
+      "categoryId": "19",
+      "liveBroadcastContent": "none",
+      "defaultLanguage": "en",
+      "localized": { "title": "Sunlit Orchard Path · Spring Breeze", "description": "" }
+    },
+    "localizations": {
+      "es": { "title": "Sendero soleado en el huerto · Brisa de primavera", "description": "Un sendero entre un huerto en flor en una mañana soleada de primavera. Cantos de pájaros y una brisa suave.\n#springambience" },
+      "pt-BR": { "title": "Caminho ensolarado no pomar · Brisa de primavera", "description": "Um caminho por um pomar florido numa manhã ensolarada de primavera. Canto de pássaros e uma brisa suave.\n#springambience" },
+      "hi": { "title": "धूप भरा बगीचे का रास्ता · वसंत की हवा", "description": "वसंत की धूप भरी सुबह में खिले हुए बगीचे से होकर जाता रास्ता। पक्षियों का गीत और हल्की हवा।\n#springambience" },
+      "id": { "title": "Jalan Kebun Bermandikan Matahari · Angin Musim Semi", "description": "Jalan setapak melewati kebun yang sedang berbunga di pagi musim semi yang cerah. Kicau burung dan angin lembut.\n#springambience" },
+      "ja": { "title": "陽だまりの果樹園の小道・春のそよ風", "description": "晴れた春の朝、花咲く果樹園を抜ける小道。鳥のさえずりとやわらかな風。\n#springambience" },
+      "de": { "title": "Sonniger Obstgartenweg · Frühlingsbrise", "description": "Ein Weg durch einen blühenden Obstgarten an einem sonnigen Frühlingsmorgen. Vogelgesang und eine sanfte Brise.\n#springambience" },
+      "vi": { "title": "Lối đi vườn cây ngập nắng · Gió xuân", "description": "Lối đi qua vườn cây đang nở hoa vào một buổi sáng mùa xuân đầy nắng. Tiếng chim hót và làn gió nhẹ.\n#springambience" },
+      "tr": { "title": "Güneşli Meyve Bahçesi Yolu · Bahar Esintisi", "description": "Güneşli bir bahar sabahında çiçek açmış bir meyve bahçesinden geçen yol. Kuş sesleri ve hafif bir esinti.\n#springambience" },
+      "ko": { "title": "햇살 가득한 과수원 길 · 봄바람", "description": "화창한 봄날 아침, 꽃이 핀 과수원을 지나는 길. 새소리와 부드러운 바람.\n#springambience" },
+      "fr": { "title": "Chemin ensoleillé dans le verger · Brise de printemps", "description": "Un chemin à travers un verger en fleurs par un matin de printemps ensoleillé. Chants d'oiseaux et brise légère.\n#springambience" },
+      "ar": { "title": "ممر البستان المشمس · نسيم الربيع", "description": "ممر عبر بستان مزهر في صباح ربيعي مشمس. تغريد الطيور ونسيم لطيف.\n#springambience" },
+      "th": { "title": "ทางเดินในสวนผลไม้ที่มีแสงแดด · สายลมฤดูใบไม้ผลิ", "description": "ทางเดินผ่านสวนผลไม้ที่กำลังออกดอกในเช้าฤดูใบไม้ผลิที่มีแดดจ้า เสียงนกร้องและสายลมอ่อน ๆ\n#springambience" }
+    }
+  },
+  {
+    "kind": "youtube#video",
+    "id": "mockNoLang1",
+    "snippet": {
+      "publishedAt": "2026-10-09T08:00:00Z",
+      "channelId": "UCmockLivingPostcard02",
+      "channelTitle": "The Living Postcard",
+      "title": "Quiet Library Afternoon · Pages and Soft Rain",
+      "description": "An old library on a rainy afternoon: turning pages, a ticking clock and rain on tall windows.",
+      "categoryId": "19",
+      "liveBroadcastContent": "none",
+      "localized": { "title": "Quiet Library Afternoon · Pages and Soft Rain", "description": "" }
+    }
+  }
+]

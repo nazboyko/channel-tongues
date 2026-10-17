@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "youtube#channel",
+    "id": "UCmockSlowNightHours01",
+    "snippet": { "title": "The Slow Night Hours", "customUrl": "@theslownighthours" },
+    "contentDetails": { "relatedPlaylists": { "uploads": "UUmockSlowNightHours01" } }
+  },
+  {
+    "kind": "youtube#channel",
+    "id": "UCmockLivingPostcard02",
+    "snippet": { "title": "The Living Postcard", "customUrl": "@thelivingpostcard" },
+    "contentDetails": { "relatedPlaylists": { "uploads": "UUmockLivingPostcard02" } }
+  }
+]

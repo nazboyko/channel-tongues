@@ -61,10 +61,52 @@ func Load() (*Config, error) {
 	}
 	ids := os.Getenv("TEST_VIDEO_IDS")
 	if ids == "" {
-		ids = readDotEnv(".env", "TEST_VIDEO_IDS")
+		for _, path := range dotEnvCandidates() {
+			if ids = readDotEnv(path, "TEST_VIDEO_IDS"); ids != "" {
+				break
+			}
+		}
 	}
 	c.TestVideoIDs = splitList(ids)
 	return c, nil
+}
+
+// dotEnvCandidates lists where a project .env may be: the working directory
+// and its parents up to the module root, and the binary's folder and its
+// parent (bin/tongues in a checkout). The write guard must not depend on
+// which folder a command is started from.
+func dotEnvCandidates() []string {
+	var out []string
+	if wd, err := os.Getwd(); err == nil {
+		dir := wd
+		for {
+			out = append(out, filepath.Join(dir, ".env"))
+			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		if real, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = real
+		}
+		dir := filepath.Dir(exe)
+		out = append(out, filepath.Join(dir, ".env"), filepath.Join(filepath.Dir(dir), ".env"))
+	}
+	return out
+}
+
+// GuardLine describes the write guard for doctor, serve and --apply.
+func (c *Config) GuardLine() string {
+	if len(c.TestVideoIDs) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Writes are limited to the %d test video(s) in TEST_VIDEO_IDS.", len(c.TestVideoIDs))
 }
 
 // DefaultDataDir is ~/Library/Application Support/channel-tongues on macOS
