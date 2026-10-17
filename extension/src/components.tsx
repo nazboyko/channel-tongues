@@ -21,7 +21,8 @@ export function markWords(text: string, words: string[] | undefined): { text: st
 /** "Reads in English as: ..." under a translated title, added words marked. */
 export function ReadsAs(props: { sourceName: string; title?: string; line?: string; added?: string[]; stale?: boolean }) {
   if (!props.title) return null;
-  const text = props.line ? `${props.title}. ${props.line}` : props.title;
+  const joiner = /[.!?。！？]$/.test(props.title.trim()) ? " " : ". ";
+  const text = props.line ? `${props.title.trim()}${joiner}${props.line}` : props.title;
   const marked = (props.added?.length ?? 0) > 0;
   // Two lines when nothing is marked; in full when words are marked, so no
   // mark is ever cut off. Screen readers get the whole text either way.

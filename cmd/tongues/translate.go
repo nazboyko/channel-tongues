@@ -199,7 +199,7 @@ func runTranslate(cfg *config.Config, args []string) error {
 	start := time.Now()
 	results := eng.Run(ctx, src.text, targets, keep, nil)
 	wall := time.Since(start)
-	printResults(results, *f.full)
+	printResults(results, *f.full, src.text.Language)
 	if *f.measure {
 		printMeasure(results, wall, eng, *f.cold)
 	}
@@ -265,7 +265,7 @@ func statusWord(s translate.Status) string {
 	return string(s)
 }
 
-func printResults(results []translate.Result, full bool) {
+func printResults(results []translate.Result, full bool, sourceLang string) {
 	ready, check := 0, 0
 	for _, r := range results {
 		switch r.Status {
@@ -288,18 +288,30 @@ func printResults(results []translate.Result, full bool) {
 		for _, r := range results {
 			fmt.Printf("\n=== %s (%s), %s\n%s\n\n%s\n", langs.EnglishName(r.Lang), r.Lang, statusWord(r.Status), r.Title, r.Description)
 			if r.BackTitle != "" {
-				fmt.Printf("\nReads in English as: %s / %s\n", markAdded(r.BackTitle, r.Added), markAdded(r.BackLine, r.Added))
+				fmt.Printf("\nReads in %s as: %s / %s\n", readsLanguage(sourceLang), markAdded(r.BackTitle, r.Added), markAdded(r.BackLine, r.Added))
 			}
 		}
 	}
 }
 
-// markAdded puts [brackets] around the added words, for the terminal.
+// readsLanguage names the language a read-back is in.
+func readsLanguage(code string) string {
+	if code == "" {
+		return "English"
+	}
+	if l, ok := langs.Get(code); ok {
+		return l.English
+	}
+	return "the video's language"
+}
+
+// markAdded puts [brackets] around the added words, for the terminal. Word
+// edges are any non-letter, so accented words are marked too.
 func markAdded(text string, added []string) string {
 	for _, w := range added {
-		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(w) + `\b`)
+		re, err := regexp.Compile(`(?i)(^|[^\pL\pN])(` + regexp.QuoteMeta(w) + `)([^\pL\pN]|$)`)
 		if err == nil {
-			text = re.ReplaceAllString(text, "[$0]")
+			text = re.ReplaceAllString(text, "$1[$2]$3")
 		}
 	}
 	return text
@@ -346,8 +358,11 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 		fmt.Printf("measure: failed check x%d: %s\n", n, p)
 	}
 	var backSum, backMax float64
-	backs, flagged := 0, 0
+	backs, flagged, backFailed := 0, 0, 0
 	for _, r := range results {
+		if r.BackFailed {
+			backFailed++
+		}
 		if r.BackTitle == "" {
 			continue
 		}
@@ -362,6 +377,9 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 	}
 	if backs > 0 {
 		fmt.Printf("measure: back-translation on %d languages, extra %.2fs mean, %.2fs max per language (runs next to the next language), %d flagged\n", backs, backSum/float64(backs), backMax, flagged)
+	}
+	if backFailed > 0 {
+		fmt.Printf("measure: back-translation failed on %d languages (marked Check this one)\n", backFailed)
 	}
 }
 

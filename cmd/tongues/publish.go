@@ -288,7 +288,7 @@ func runSave(cfg *config.Config, args []string) error {
 	}
 	fmt.Printf("Translating into %s...\n\n", plural(len(targets), "language"))
 	results := eng.Run(ctx, src.text, targets, a.KeepWords(), nil)
-	printResults(results, false)
+	printResults(results, false, src.text.Language)
 	dir, err := a.Save(core.SaveRequest{Channel: channel, VideoID: videoID, SourceTitle: src.text.Title, Results: results})
 	if err != nil {
 		return err

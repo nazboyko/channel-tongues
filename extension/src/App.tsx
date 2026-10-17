@@ -373,7 +373,7 @@ export function App() {
 /** The English name of the job's source language ("English" when unknown). */
 function sourceName(job: Job, languages: Language[]): string {
   const code = job.sourceLanguage || "en";
-  return languages.find((l) => l.code === code || code.startsWith(l.code + "-"))?.english ?? (code.startsWith("en") ? "English" : code);
+  return languages.find((l) => l.code === code || code.startsWith(l.code + "-"))?.english ?? (code.startsWith("en") ? "English" : "the video's language");
 }
 
 /* 1 */
