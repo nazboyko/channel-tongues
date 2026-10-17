@@ -177,10 +177,6 @@ p {
   color: var(--muted);
 }
 
-.chip.all {
-  border-style: dashed;
-}
-
 .chip .tag {
   font-size: 10px;
   border: 1px solid var(--border);

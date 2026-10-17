@@ -313,8 +313,8 @@ type videoResponse struct {
 	ChannelID       string    `json:"channelId"`
 	ChannelTitle    string    `json:"channelTitle"`
 	Languages       []langRef `json:"languages"`
-	Shown           []string  `json:"shown"`     // chips: the popular twelve plus remembered extras
-	Suggested       []string  `json:"suggested"` // ticked at first: the last selection, or the popular twelve
+	Shown           []string  `json:"shown"`     // chips: the popular twelve plus the rest of the last pick
+	Suggested       []string  `json:"suggested"` // ticked at first: the last pick (see core.UsedLanguages)
 	StudioURL       string    `json:"studioUrl"`
 }
 
@@ -338,55 +338,23 @@ func (s *Server) video(w http.ResponseWriter, r *http.Request) {
 		c := langs.Canonical(code) // pt and pt-BR are the same language to the panel
 		resp.Languages = append(resp.Languages, langRef{Code: c, Name: langs.Name(c)})
 	}
-	resp.Suggested = s.suggested(v.ChannelID, v.DefaultLanguage)
-	// A remembered "All languages" stays all languages for this video, even
-	// when it was saved on a video in another language (which misses only
-	// that language's few variants), and the chips stay the twelve: the All
-	// chip stands for the rest. Any other selection shows as chips.
-	all := langs.All(v.DefaultLanguage)
-	saved := map[string]bool{}
-	for _, c := range resp.Suggested {
-		saved[c] = true
-	}
-	missing := 0
-	for _, l := range all {
-		if !saved[l.Code] {
-			missing++
-		}
-	}
-	shown := append([]string(nil), langs.Popular...)
-	if len(resp.Suggested) > 20 && missing <= 5 {
-		resp.Suggested = resp.Suggested[:0]
-		for _, l := range all {
-			resp.Suggested = append(resp.Suggested, l.Code)
-		}
-	} else {
-		shown = append(shown, resp.Suggested...)
-	}
+	// Ticked: the languages picked last time. Shown: the popular twelve, so
+	// one left out is a tap away, then the rest of that pick.
+	resp.Suggested = []string{}
 	resp.Shown = []string{}
+	for _, c := range s.Svc.UsedLanguages(v.ChannelID) {
+		if !langs.SameBase(c, v.DefaultLanguage) {
+			resp.Suggested = append(resp.Suggested, c)
+		}
+	}
 	seen := map[string]bool{}
-	for _, c := range shown {
+	for _, c := range append(append([]string(nil), langs.Popular...), resp.Suggested...) {
 		if !seen[c] && !langs.SameBase(c, v.DefaultLanguage) {
 			seen[c] = true
 			resp.Shown = append(resp.Shown, c)
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// suggested is the channel's last selection, or the popular twelve.
-func (s *Server) suggested(channelID, source string) []string {
-	codes := append([]string(nil), langs.Popular...)
-	if saved, ok, _ := s.Svc.Store.Setting("lastLanguages:" + channelID); ok && saved != "" {
-		codes = strings.Split(saved, ",")
-	}
-	out := []string{}
-	for _, c := range codes {
-		if source == "" || !langs.SameBase(c, source) {
-			out = append(out, c)
-		}
-	}
-	return out
 }
 
 type uploadItem struct {
@@ -491,9 +459,7 @@ func (s *Server) startJob(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nolangs", "Pick at least one language.")
 		return
 	}
-	if meta.ChannelID != "" {
-		s.Svc.Store.SetSetting("lastLanguages:"+meta.ChannelID, strings.Join(codes, ","))
-	}
+	s.Svc.RememberLanguages(meta.ChannelID, codes)
 	id := s.Runner.Start(src, codes, meta)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": id})
 }
@@ -816,7 +782,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) languages(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"languages": langs.All(r.URL.Query().Get("source")), "popular": langs.Popular})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"languages": langs.All(r.URL.Query().Get("source")), "popular": langs.Popular,
+		"used": s.Svc.UsedLanguages(""), // for pasted text, which has no channel
+	})
 }
 
 // authURL starts a sign-in and returns the Google page to open. The helper

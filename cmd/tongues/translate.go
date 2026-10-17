@@ -38,7 +38,7 @@ type translateFlags struct {
 
 func addTranslateFlags(fs *flag.FlagSet) *translateFlags {
 	return &translateFlags{
-		langs:     fs.String("langs", "popular", "popular, all, used, or a list such as es,pt-BR,ja"),
+		langs:     fs.String("langs", "popular", "popular, used (the last pick in the panel), or a list such as es,pt-BR,ja"),
 		mock:      fs.Bool("mock", false, "use the bundled sample videos instead of YouTube"),
 		model:     fs.String("model", "", "Ollama model tag (default: gemma4:26b when downloaded, else gemma4:e4b)"),
 		title:     fs.String("title", "", "translate this title instead of a video's"),
@@ -92,16 +92,8 @@ func (a *app) pickLanguages(spec, sourceLang, channelID string) ([]string, error
 	switch strings.TrimSpace(spec) {
 	case "", "popular":
 		codes = append(codes, langs.Popular...)
-	case "all":
-		for _, l := range langs.All(sourceLang) {
-			codes = append(codes, l.Code)
-		}
 	case "used":
-		if saved, ok, _ := a.Store.Setting("lastLanguages:" + channelID); ok && saved != "" {
-			codes = strings.Split(saved, ",")
-		} else {
-			codes = append(codes, langs.Popular...)
-		}
+		codes = a.UsedLanguages(channelID) // the panel's last pick on this channel, then on any
 	default:
 		for _, c := range strings.Split(spec, ",") {
 			c = strings.TrimSpace(c)

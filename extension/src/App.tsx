@@ -615,8 +615,18 @@ function PasteScreen(props: {
       if (!fill(f)) setFilled("ask");
     });
   }, [props.studioTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Tick the languages picked last time; the twelve stay as chips.
+  useEffect(() => {
+    api.usedLanguages().then(
+      (used) => {
+        setSelected((cur) => cur ?? new Set(used));
+        setExtra((cur) => [...cur, ...used.filter((c) => !popular.includes(c) && !cur.includes(c))]);
+      },
+      () => undefined,
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const chosen = selected ?? new Set(popular);
-  const codes = [...popular, ...extra];
+  const codes = [...popular, ...extra.filter((c) => !popular.includes(c))];
   const toggle = (c: string) => {
     const next = new Set(chosen);
     if (next.has(c)) next.delete(c);
@@ -624,9 +634,7 @@ function PasteScreen(props: {
     setSelected(next);
   };
   // The helper finds the pasted text's language and leaves it out.
-  const allCodes = props.languages.map((l) => l.code);
-  const allOn = allCodes.length > 0 && allCodes.every((c) => chosen.has(c));
-  const picked = [...allCodes, ...codes].filter((c, i, list) => chosen.has(c) && list.indexOf(c) === i);
+  const picked = codes.filter((c) => chosen.has(c));
   const count = picked.length;
   return (
     <Shell footer={props.footer}>
@@ -661,7 +669,6 @@ function PasteScreen(props: {
         langs={chipLangs(codes, props.languages, () => false)}
         selected={chosen}
         onToggle={toggle}
-        all={{ on: allOn, count: allCodes.length, onToggle: () => setSelected(new Set(allOn ? popular : allCodes)) }}
       />
       <MoreLanguages
         all={props.languages}
@@ -768,11 +775,7 @@ function VideoScreen(props: {
     return old[b] ?? b;
   };
   const isSource = (c: string) => !!video.defaultLanguage && base(c) === base(video.defaultLanguage);
-  // Every language the video does not have yet (the "All languages" action
-  // never replaces a translation that is already there).
-  const allCodes = props.languages.map((l) => l.code).filter((c) => !isSource(c) && !has(c));
-  const allOn = allCodes.length > 0 && allCodes.every((c) => selected.has(c));
-  const chosen = [...props.languages.map((l) => l.code), ...codes].filter((c, i, list) => selected.has(c) && !isSource(c) && list.indexOf(c) === i);
+  const chosen = codes.filter((c) => selected.has(c) && !isSource(c));
   const count = chosen.length;
   const summary = `${video.sourceName || "No language set"} · ${
     video.languages.length === 0 ? "no translations yet" : `has ${plural(video.languages.length, "language")}`
@@ -817,12 +820,6 @@ function VideoScreen(props: {
         langs={chipLangs(codes, props.languages, has)}
         selected={selected}
         onToggle={toggle}
-        all={{
-          on: allOn,
-          count: allCodes.length,
-          onToggle: () =>
-            setSelected(new Set(allOn ? props.languages.filter((l) => l.popular && !isSource(l.code) && !has(l.code)).map((l) => l.code) : allCodes)),
-        }}
       />
       <MoreLanguages
         all={props.languages.filter((l) => !isSource(l.code))}

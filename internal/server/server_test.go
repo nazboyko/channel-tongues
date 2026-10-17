@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"encoding/json"
-	"github.com/nazboyko/channel-tongues/internal/langs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -168,42 +167,34 @@ func TestVideoAndUploads(t *testing.T) {
 	if v.Title == "" || v.SourceName != "English" || len(v.Languages) != 2 || len(v.Suggested) != 12 || len(v.Shown) != 12 || !strings.HasSuffix(v.StudioURL, "/translations") {
 		t.Fatalf("video %+v", v)
 	}
-	// After a translation with a smaller selection plus Italian, the chips
-	// still show all twelve (so "has it" stays visible) and Italian too.
-	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", "es,ja,it")
+	// After translating a smaller pick plus Italian from More languages, that
+	// pick is ticked next time; the twelve stay as chips (so a left-out one is
+	// a tap away and "has it" stays visible) and Italian joins them.
+	h.do("POST", "/jobs", `{"videoId":"mockRain001","languages":["es","ja","it"]}`, nil).Body.Close()
 	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
-	if len(v.Suggested) != 3 || len(v.Shown) != 13 || v.Shown[12] != "it" {
-		t.Fatalf("remembered selection: suggested %v shown %v", v.Suggested, v.Shown)
+	if strings.Join(v.Suggested, ",") != "es,ja,it" || len(v.Shown) != 13 || v.Shown[12] != "it" {
+		t.Fatalf("remembered pick: suggested %v shown %v", v.Suggested, v.Shown)
 	}
-	// After "All languages" the selection is remembered, but the chips stay
-	// the twelve instead of a wall of 160.
-	var all []string
-	for _, l := range langs.All("en") {
-		all = append(all, l.Code)
+	// A channel never translated on starts from the last pick anywhere.
+	decode(t, h.do("GET", "/video/mockHarbor3", "", nil), &v)
+	if v.ChannelID == "UCmockSlowNightHours01" || strings.Join(v.Suggested, ",") != "es,ja,it" || len(v.Shown) != 13 {
+		t.Fatalf("other channel: %s suggested %v shown %v", v.ChannelID, v.Suggested, v.Shown)
 	}
-	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(all, ","))
+	h.do("POST", "/jobs", `{"videoId":"mockHarbor3","languages":["de"]}`, nil).Body.Close()
 	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
-	if len(v.Suggested) != len(all) || len(v.Shown) != 12 {
-		t.Fatalf("remembered all: suggested %d shown %v", len(v.Suggested), v.Shown)
+	if strings.Join(v.Suggested, ",") != "es,ja,it" {
+		t.Fatalf("each channel keeps its own pick: %v", v.Suggested)
 	}
-	// Saved on a Spanish video (no Spanish, no English variants missing):
-	// still all languages here, with English left out as the source.
-	var fromSpanish []string
-	for _, l := range langs.All("es") {
-		if !strings.HasPrefix(l.Code, "en") {
-			fromSpanish = append(fromSpanish, l.Code)
-		}
+	// Pasted text starts from the last pick, and its own pick is remembered.
+	var ls struct{ Used []string }
+	decode(t, h.do("GET", "/languages", "", nil), &ls)
+	if strings.Join(ls.Used, ",") != "de" {
+		t.Fatalf("paste screen: %v", ls.Used)
 	}
-	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(fromSpanish, ","))
-	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
-	if len(v.Suggested) != len(all) || len(v.Shown) != 12 {
-		t.Fatalf("remembered all from a Spanish video: suggested %d shown %v", len(v.Suggested), v.Shown)
-	}
-	// A hand-picked 25 is not "all": every one shows as a chip.
-	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(all[:25], ","))
-	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
-	if len(v.Suggested) != 25 || len(v.Shown) != 25 {
-		t.Fatalf("remembered 25: suggested %d shown %d", len(v.Suggested), len(v.Shown))
+	h.do("POST", "/jobs", `{"title":"Rain","description":"Rain all night.","sourceLanguage":"en","languages":["fr","ko"]}`, nil).Body.Close()
+	decode(t, h.do("GET", "/languages", "", nil), &ls)
+	if strings.Join(ls.Used, ",") != "fr,ko" {
+		t.Fatalf("after a paste: %v", ls.Used)
 	}
 	r := h.do("GET", "/video/notarealid", "", nil)
 	if r.StatusCode != 400 {

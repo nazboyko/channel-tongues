@@ -153,8 +153,6 @@ export function LanguageChips(props: {
   langs: ChipLang[];
   selected: Set<string>;
   onToggle: (code: string) => void;
-  /** The "All languages" quick action: on when every language is ticked. */
-  all?: { on: boolean; count: number; onToggle: () => void };
 }) {
   return (
     <div className="chips" role="group" aria-label="Languages to translate into">
@@ -168,12 +166,6 @@ export function LanguageChips(props: {
           </button>
         );
       })}
-      {props.all && (
-        <button className="chip all" aria-pressed={props.all.on} onClick={props.all.onToggle}>
-          All languages
-          {!props.all.on && <span className="tag">{props.all.count}</span>}
-        </button>
-      )}
     </div>
   );
 }

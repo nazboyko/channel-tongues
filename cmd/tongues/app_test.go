@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"strings"
 	"testing"
 
 	"github.com/nazboyko/channel-tongues/internal/config"
@@ -32,19 +33,24 @@ func TestDisplayWidth(t *testing.T) {
 	}
 }
 
-func TestPickAllLanguages(t *testing.T) {
+func TestPickUsedLanguages(t *testing.T) {
 	a, err := newApp(&config.Config{DataDir: t.TempDir()}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	all, err := a.pickLanguages("all", "en", "")
-	if err != nil || len(all) < 160 {
-		t.Fatalf("got %d languages, %v", len(all), err)
+	got, err := a.pickLanguages("used", "en", "UCa")
+	if err != nil || len(got) != 12 || got[0] != "es" {
+		t.Fatalf("nothing picked yet: the popular twelve, got %v %v", got, err)
 	}
-	for _, c := range all {
-		if c == "en" || c == "en-GB" || c == "en-IN" {
-			t.Fatalf("the source language is left out, got %s", c)
-		}
+	a.RememberLanguages("UCa", []string{"es", "it", "fr"})
+	if got, _ := a.pickLanguages("used", "en", "UCa"); strings.Join(got, ",") != "es,it,fr" {
+		t.Fatalf("the channel's last pick, got %v", got)
+	}
+	if got, _ := a.pickLanguages("used", "es", "UCnew"); strings.Join(got, ",") != "it,fr" {
+		t.Fatalf("a new channel uses the last pick on any channel, without its source language, got %v", got)
+	}
+	if _, err := a.pickLanguages("all", "en", ""); err == nil {
+		t.Fatal("there is no all: the list is only languages the model handled")
 	}
 }

@@ -173,6 +173,8 @@ export class Api {
   uploads = (limit = 6) => this.request<{ videos: Upload[] }>("GET", `/channel/videos?limit=${limit}`).then((r) => r.videos);
   languages = (source: string) =>
     this.request<{ languages: Language[] }>("GET", `/languages?source=${encodeURIComponent(source)}`).then((r) => r.languages);
+  /** The last pick on any channel, for pasted text (the popular twelve at first). */
+  usedLanguages = () => this.request<{ used: string[] }>("GET", "/languages").then((r) => r.used);
   startJob = (req: { videoId?: string; title?: string; description?: string; sourceLanguage?: string; languages: string[] }) =>
     this.request<{ jobId: string }>("POST", "/jobs", req).then((r) => r.jobId);
   job = (id: string) => this.request<Job>("GET", `/jobs/${id}`);
