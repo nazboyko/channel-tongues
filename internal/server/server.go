@@ -59,7 +59,7 @@ func New(svc *core.Service, pairing string, port int) *Server {
 	s.Runner = &jobs.Runner{
 		Store: svc.Store,
 		Engine: func(ctx context.Context) *translate.Engine {
-			return &translate.Engine{Model: svc.Model(ctx), Parallel: 1, DetectLatin: true, Log: svc.Log}
+			return &translate.Engine{Model: svc.Model(ctx), Parallel: 1, DetectLatin: true, BackTranslate: true, Log: svc.Log}
 		},
 		Keep: svc.KeepWords,
 		Log:  svc.Log,

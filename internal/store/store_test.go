@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -124,12 +125,31 @@ func TestJobsRoundTrip(t *testing.T) {
 	s.SaveJob(JobRow{ID: "j1", VideoID: "v", State: "running", SourceTitle: "t", Languages: "es,de"})
 	s.SaveJob(JobRow{ID: "j1", State: "done"})
 	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "x", Seconds: 1.5})
-	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "y", Edited: true})
+	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "y", Edited: true, BackTitle: "back", Added: "quiet,calm"})
 	j, ts, ok, err := s.LoadJob("j1")
-	if !ok || err != nil || j.State != "done" || j.Languages != "es,de" || len(ts) != 1 || ts[0].Title != "y" || !ts[0].Edited {
+	if !ok || err != nil || j.State != "done" || j.Languages != "es,de" || len(ts) != 1 || ts[0].Title != "y" || !ts[0].Edited || ts[0].BackTitle != "back" || ts[0].Added != "quiet,calm" {
 		t.Fatalf("got %+v %+v %v %v", j, ts, ok, err)
 	}
 	if _, _, ok, _ := s.LoadJob("nope"); ok {
 		t.Fatal("unknown job")
+	}
+}
+
+func TestUpgradeFromTheFirstSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (1);`)
+	db.Exec(migrations[0])
+	db.Close()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	defer s.Close()
+	if err := s.SaveTranslation(TranslationRow{JobID: "j", Lang: "es", Status: "ready", BackTitle: "x"}); err != nil {
+		t.Fatalf("new columns missing after upgrade: %v", err)
 	}
 }

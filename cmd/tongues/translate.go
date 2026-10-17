@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ type translateFlags struct {
 	parallel  *int
 	fakeModel *bool
 	record    *string
+	noBack    *bool
 }
 
 func addTranslateFlags(fs *flag.FlagSet) *translateFlags {
@@ -48,6 +50,7 @@ func addTranslateFlags(fs *flag.FlagSet) *translateFlags {
 		parallel:  fs.Int("parallel", 1, "languages at once"),
 		fakeModel: fs.Bool("fake-model", false, "use the built-in sample translations instead of Ollama"),
 		record:    fs.String("record-samples", "", "add the answers to a sample file for the fake model (development)"),
+		noBack:    fs.Bool("no-back", false, "skip the back-translation that checks the meaning"),
 	}
 }
 
@@ -126,10 +129,10 @@ func (a *app) pickLanguages(spec, sourceLang, channelID string) ([]string, error
 // engine builds the translation engine for this run.
 func (a *app) engine(ctx context.Context, f *translateFlags) (*translate.Engine, *translate.Ollama) {
 	if *f.fakeModel {
-		return &translate.Engine{Model: translate.NewFakeModel(0), Parallel: *f.parallel, DetectLatin: true, Log: a.Log}, nil
+		return &translate.Engine{Model: translate.NewFakeModel(0), Parallel: *f.parallel, DetectLatin: true, BackTranslate: !*f.noBack, Log: a.Log}, nil
 	}
 	o := a.Ollama(ctx, *f.model)
-	return &translate.Engine{Model: o, Parallel: *f.parallel, DetectLatin: !*f.noDetect, Log: a.Log}, o
+	return &translate.Engine{Model: o, Parallel: *f.parallel, DetectLatin: !*f.noDetect, BackTranslate: !*f.noBack, Log: a.Log}, o
 }
 
 // checkModel stops early with the one command that fixes the model.
@@ -209,7 +212,12 @@ func runTranslate(cfg *config.Config, args []string) error {
 // recordSamples stores ready answers, with placeholders, keyed by the
 // protected source title, for the fake model used by serve --mock.
 func recordSamples(path string, src translate.Source, keep []string, results []translate.Result) error {
-	samples := map[string]map[string]translate.Output{}
+	type sample struct {
+		translate.Output
+		Back *translate.Back `json:"back,omitempty"`
+		New  []string        `json:"new,omitempty"`
+	}
+	samples := map[string]map[string]sample{}
 	if b, err := os.ReadFile(path); err == nil {
 		if err := json.Unmarshal(b, &samples); err != nil {
 			return err
@@ -218,12 +226,17 @@ func recordSamples(path string, src translate.Source, keep []string, results []t
 	var p translate.Protected
 	key := p.Protect(src.Title, keep)
 	if samples[key] == nil {
-		samples[key] = map[string]translate.Output{}
+		samples[key] = map[string]sample{}
 	}
 	n := 0
 	for _, r := range results {
-		if r.Status == translate.StatusReady {
-			samples[key][r.Lang] = r.Raw
+		if r.Status == translate.StatusReady || len(r.Added) > 0 {
+			e := sample{Output: r.Raw, New: r.Added}
+			if r.RawBack != (translate.Back{}) {
+				b := r.RawBack
+				e.Back = &b
+			}
+			samples[key][r.Lang] = e
 			n++
 		}
 	}
@@ -261,7 +274,11 @@ func printResults(results []translate.Result, full bool) {
 		case translate.StatusCheck:
 			check++
 		}
-		fmt.Printf("  %s %s %s %5.1fs  %s\n", pad(langs.Name(r.Lang), 18), pad(r.Lang, 7), pad(statusWord(r.Status), 14), r.Duration.Seconds(), truncate(r.Title, 70))
+		back := ""
+		if r.BackTitle != "" {
+			back = "reads as: " + truncate(markAdded(r.BackTitle, r.Added), 46)
+		}
+		fmt.Printf("  %s %s %s %5.1fs  %s  %s\n", pad(langs.Name(r.Lang), 18), pad(r.Lang, 7), pad(statusWord(r.Status), 14), r.Duration.Seconds(), pad(truncate(r.Title, 44), 44), back)
 		if r.Note != "" {
 			fmt.Printf("  %s %s %s %s\n", pad("", 18), pad("", 7), pad("", 14), "  "+r.Note)
 		}
@@ -269,9 +286,23 @@ func printResults(results []translate.Result, full bool) {
 	fmt.Printf("\n%d ready, %d to check.\n", ready, check)
 	if full {
 		for _, r := range results {
-			fmt.Printf("\n=== %s (%s) — %s\n%s\n\n%s\n", langs.EnglishName(r.Lang), r.Lang, statusWord(r.Status), r.Title, r.Description)
+			fmt.Printf("\n=== %s (%s), %s\n%s\n\n%s\n", langs.EnglishName(r.Lang), r.Lang, statusWord(r.Status), r.Title, r.Description)
+			if r.BackTitle != "" {
+				fmt.Printf("\nReads in English as: %s / %s\n", markAdded(r.BackTitle, r.Added), markAdded(r.BackLine, r.Added))
+			}
 		}
 	}
+}
+
+// markAdded puts [brackets] around the added words, for the terminal.
+func markAdded(text string, added []string) string {
+	for _, w := range added {
+		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(w) + `\b`)
+		if err == nil {
+			text = re.ReplaceAllString(text, "[$0]")
+		}
+	}
+	return text
 }
 
 // printMeasure prints lines ready to paste into the notes.
@@ -313,6 +344,24 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 		calls, retries, check, len(results), load.Seconds(), maxPrompt, numCtx)
 	for p, n := range problems {
 		fmt.Printf("measure: failed check x%d: %s\n", n, p)
+	}
+	var backSum, backMax float64
+	backs, flagged := 0, 0
+	for _, r := range results {
+		if r.BackTitle == "" {
+			continue
+		}
+		backs++
+		s := r.BackDuration.Seconds()
+		backSum += s
+		backMax = max(backMax, s)
+		if len(r.Added) > 0 {
+			flagged++
+			fmt.Printf("measure: back-translation %s adds %s: %s\n", r.Lang, strings.Join(r.Added, ", "), markAdded(r.BackTitle, r.Added)+" / "+markAdded(r.BackLine, r.Added))
+		}
+	}
+	if backs > 0 {
+		fmt.Printf("measure: back-translation on %d languages, extra %.2fs mean, %.2fs max per language (runs next to the next language), %d flagged\n", backs, backSum/float64(backs), backMax, flagged)
 	}
 }
 
