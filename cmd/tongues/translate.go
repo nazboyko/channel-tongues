@@ -148,6 +148,7 @@ func checkModel(ctx context.Context, o *translate.Ollama) error {
 func runTranslate(cfg *config.Config, args []string) error {
 	fs := flag.NewFlagSet("translate", flag.ContinueOnError)
 	f := addTranslateFlags(fs)
+	measureJSON := fs.String("measure-json", "", "with or without --measure: also write the cost summary to this JSON file")
 	pos, err := parseArgs(fs, args)
 	if err != nil {
 		return err
@@ -192,12 +193,32 @@ func runTranslate(cfg *config.Config, args []string) error {
 		using = o.Model
 	}
 	fmt.Printf("Translating into %s with %s: %s\n\n", plural(len(targets), "language"), using, strings.Join(targets, " "))
+	measuring := *f.measure || *measureJSON != ""
+	var meter *powerMeter
+	if measuring {
+		meter = startPowerMeter(ctx) // nil without macmon
+	}
 	start := time.Now()
 	results := eng.Run(ctx, src.text, targets, keep, nil)
 	wall := time.Since(start)
+	power := meter.stop(wall.Seconds())
 	printResults(results, *f.full, src.text.Language)
-	if *f.measure {
+	if measuring {
 		printMeasure(results, wall, eng, *f.cold)
+		c := costOf(results, wall, *f.cold)
+		c.Machine, c.Power = readMachine(), power
+		if o != nil {
+			if info, err := o.Info(ctx); err == nil {
+				c.Model = &info
+			}
+		}
+		printCost(c)
+		if *measureJSON != "" {
+			if err := writeCostJSON(*measureJSON, c); err != nil {
+				return err
+			}
+			fmt.Printf("\nWrote %s.\n", *measureJSON)
+		}
 	}
 	if *f.record != "" {
 		return recordSamples(*f.record, src.text, keep, results)
@@ -350,7 +371,7 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 	fmt.Println()
 	fmt.Printf("measure: %s, %d languages, parallel %d, wall %.1fs, per language mean %.1fs median %.1fs max %.1fs\n",
 		mode, len(results), eng.Parallel, wall.Seconds(), sum/float64(len(secs)), secs[len(secs)/2], secs[len(secs)-1])
-	fmt.Printf("measure: model calls %d, retries %d, check-this-one %d of %d, longest model load %.1fs, largest prompt+answer %d tokens of num_ctx %d\n",
+	fmt.Printf("measure: translate calls %d, retries %d, check-this-one %d of %d, longest model load %.1fs, largest prompt+answer %d tokens of num_ctx %d\n",
 		calls, retries, check, len(results), load.Seconds(), maxPrompt, numCtx)
 	for p, n := range problems {
 		fmt.Printf("measure: failed check x%d: %s\n", n, p)
