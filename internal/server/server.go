@@ -303,7 +303,8 @@ type videoResponse struct {
 	ChannelID       string    `json:"channelId"`
 	ChannelTitle    string    `json:"channelTitle"`
 	Languages       []langRef `json:"languages"`
-	Suggested       []string  `json:"suggested"`
+	Shown           []string  `json:"shown"`     // chips: the popular twelve plus remembered extras
+	Suggested       []string  `json:"suggested"` // ticked at first: the last selection, or the popular twelve
 	StudioURL       string    `json:"studioUrl"`
 }
 
@@ -327,6 +328,14 @@ func (s *Server) video(w http.ResponseWriter, r *http.Request) {
 		resp.Languages = append(resp.Languages, langRef{Code: code, Name: langs.Name(code)})
 	}
 	resp.Suggested = s.suggested(v.ChannelID, v.DefaultLanguage)
+	resp.Shown = []string{}
+	seen := map[string]bool{}
+	for _, c := range append(append([]string(nil), langs.Popular...), resp.Suggested...) {
+		if !seen[c] && !langs.SameBase(c, v.DefaultLanguage) {
+			seen[c] = true
+			resp.Shown = append(resp.Shown, c)
+		}
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 

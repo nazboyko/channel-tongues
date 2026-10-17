@@ -127,8 +127,15 @@ func TestVideoAndUploads(t *testing.T) {
 	h := newHarness(t)
 	var v videoResponse
 	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
-	if v.Title == "" || v.SourceName != "English" || len(v.Languages) != 2 || len(v.Suggested) != 12 || !strings.HasSuffix(v.StudioURL, "/translations") {
+	if v.Title == "" || v.SourceName != "English" || len(v.Languages) != 2 || len(v.Suggested) != 12 || len(v.Shown) != 12 || !strings.HasSuffix(v.StudioURL, "/translations") {
 		t.Fatalf("video %+v", v)
+	}
+	// After a translation with a smaller selection plus Italian, the chips
+	// still show all twelve (so "has it" stays visible) and Italian too.
+	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", "es,ja,it")
+	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
+	if len(v.Suggested) != 3 || len(v.Shown) != 13 || v.Shown[12] != "it" {
+		t.Fatalf("remembered selection: suggested %v shown %v", v.Suggested, v.Shown)
 	}
 	r := h.do("GET", "/video/notarealid", "", nil)
 	if r.StatusCode != 400 {
