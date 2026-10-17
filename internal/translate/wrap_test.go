@@ -40,6 +40,10 @@ func TestJoinSoftWrapsKeepsRealStructure(t *testing.T) {
 		{"a credit line", "Music by Jane Doe from the Artlist library\nFootage shot on a small camera"},
 		{"a gear list", "Gear I use in this video\nCamera ⟦1⟧"},
 		{"an emoji list", "Everything you get in this pack\n✅ 50 presets for night scenes"},
+		{"all lowercase", "three hours of rain on a cabin window\nno ads, no talking, just the rain\nheadphones on and sleep well"},
+		{"a name in lowercase", "Everything I used to film this video\niPhone 15 Pro ⟦1⟧"},
+		{"an item with its link", "The microphones I recorded this one with\nZoom H5 ⟦1⟧"},
+		{"a short item after a small word", "Some of the songs I fell asleep to\nWeightless\nClair de Lune"},
 	}
 	for _, tc := range cases {
 		if got := JoinSoftWraps(tc.in); got != tc.in {
