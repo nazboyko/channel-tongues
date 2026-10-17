@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channel Tongues</title>
+<meta name="description" content="Your channel's titles and descriptions in every language, translated on your own laptop.">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+<header class="bar">
+  <a class="brand" href="#top" id="top">
+    <svg class="mark" viewBox="18 12 98 98" aria-hidden="true">
+      <circle cx="66" cy="56" r="36" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-dasharray="7.92 10.93" transform="rotate(-96.30 66 56)"/>
+      <path d="M51.2 91.0 Q44.8 98.4 32.4 105.7 Q32.4 87.8 32.4 73.8 Z" fill="currentColor" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+    </svg>
+    Channel Tongues
+  </a>
+  <a class="repo" href="https://github.com/nazboyko/channel-tongues">Code on GitHub</a>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="copy">
+      <h1>Your channel's titles and descriptions in every language, translated on your own laptop.</h1>
+      <p>YouTube already shows viewers abroad a machine translation of your titles, and you never get to read it. Channel Tongues opens next to YouTube Studio, translates the title and description with Gemma 4 running on your computer, and adds them to the video after you read them over.</p>
+      <p class="cta"><a class="button" href="#install">Install it</a> <a class="quiet" href="#demo">Watch the demo</a></p>
+    </div>
+    <figure class="shot">
+      <img src="screenshots/8-review-dark.png" width="360" height="720" alt="The side panel in the Look it over state: one card per language with the translated title and description, and a Publish 9 languages button.">
+    </figure>
+  </section>
+
+  <section class="steps" aria-labelledby="how">
+    <h2 id="how">What you do</h2>
+    <ol class="cards">
+      <li>
+        <img src="screenshots/6-video-light.png" width="360" height="720" alt="The panel showing a video with twelve popular languages ticked and a Translate 10 languages button.">
+        <h3>Pick languages</h3>
+        <p>The twelve biggest YouTube audiences are ticked for you. Languages the video already has are marked.</p>
+      </li>
+      <li>
+        <img src="screenshots/7-translating-light.png" width="360" height="720" alt="The panel translating: a list of languages, the first ones marked Ready.">
+        <h3>Translate</h3>
+        <p>About a second per language on a recent laptop. Links, timestamps, hashtags and your channel name stay exactly as written.</p>
+      </li>
+      <li>
+        <img src="screenshots/9-published-light.png" width="360" height="720" alt="The panel after publishing: a check mark per language and one language marked Not published, check it first.">
+        <h3>Publish</h3>
+        <p>Anything the checks did not trust stays unticked with the reason. A backup comes first, and Undo puts it back.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="demo" id="demo" aria-labelledby="demo-title">
+    <h2 id="demo-title">Demo</h2>
+    <!-- DEMO_VIDEO_URL: replace the href below with the YouTube link of the demo video. -->
+    <a class="video" href="https://github.com/nazboyko/channel-tongues#readme">
+      <img src="screenshots/9b-copy-dark.png" width="360" height="720" alt="">
+      <span>Watch the two-minute demo on YouTube</span>
+    </a>
+  </section>
+
+  <section class="install" id="install" aria-labelledby="install-title">
+    <h2 id="install-title">Install</h2>
+    <p>You need a Mac or Linux machine with Chrome, Go 1.26 and Node 26.</p>
+    <ol>
+      <li>Install Ollama from <a href="https://ollama.com/download">ollama.com/download</a> and open it.</li>
+      <li>Get the code and build it:<pre><code>git clone https://github.com/nazboyko/channel-tongues
+cd channel-tongues &amp;&amp; make build</code></pre></li>
+      <li>Run the setup. It downloads the model, walks you through your own Google project if you want Channel Tongues to publish for you, and shows how to load the extension:<pre><code>bin/tongues setup</code></pre></li>
+      <li>Start the helper whenever you work in Studio, then open a video there and click the Channel Tongues icon:<pre><code>bin/tongues serve</code></pre></li>
+    </ol>
+    <p>No Google sign-in at all? Choose "I'll paste it myself" in the panel, then copy the results or save them to a folder.</p>
+  </section>
+
+  <section class="faq" aria-labelledby="faq-title">
+    <h2 id="faq-title">Questions</h2>
+    <details>
+      <summary>Doesn't YouTube translate titles anyway?</summary>
+      <p>It shows some viewers a machine translation you cannot see or edit. Your own translations replace it for those languages.</p>
+    </details>
+    <details>
+      <summary>Why not tags?</summary>
+      <p>YouTube keeps one set of tags per video and has no way to translate them. Titles and descriptions can be translated, so those are what Channel Tongues does.</p>
+    </details>
+    <details>
+      <summary>Where does my data go?</summary>
+      <p>Translation happens on your machine with Gemma 4 through Ollama. If you sign in to publish, the sign-in belongs to your own Google project and lives in a file on your disk; only the final translations go to YouTube. Without signing in, nothing leaves your machine.</p>
+    </details>
+    <details>
+      <summary>Which languages are ticked, and why those?</summary>
+      <p>Spanish, Portuguese (Brazil), Hindi, Indonesian, Japanese, German, Vietnamese, Turkish, Korean, French, Arabic and Thai, ordered by YouTube audience size in DataReportal's early-2025 country estimates. Every other language is one search away.</p>
+    </details>
+    <details>
+      <summary>How many videos a day?</summary>
+      <p>YouTube's free daily allowance covers about 190 publishes. Channel Tongues stops at about 170 to leave room, and the whole-channel command tells you when to continue.</p>
+    </details>
+    <details>
+      <summary>Which model, and can I change it?</summary>
+      <p>Gemma 4: <code>gemma4:26b</code> when you have downloaded it, <code>gemma4:e4b</code> otherwise. Set <code>TONGUES_MODEL</code> to try another Ollama model.</p>
+    </details>
+    <details>
+      <summary>Why does Google say the app isn't verified?</summary>
+      <p>The app is your own Google project, used only by you, so nobody at Google has reviewed it. Click Continue.</p>
+    </details>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Open source under the MIT license. Built for the Hacktoberfest Open-Source AI Challenge on DEV, October 12 to 18, 2026. Not affiliated with or endorsed by YouTube or Google.</p>
+</footer>
+</body>
+</html>

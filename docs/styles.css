@@ -1,0 +1,293 @@
+@font-face {
+  font-family: Inter;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/inter-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Inter;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+
+:root {
+  --surface: #0b1220;
+  --card: #121a2b;
+  --border: #1e2940;
+  --text: #e8ecf4;
+  --muted: #9aa5b8;
+  --accent: #f2b264;
+  --accent-ink: #1b1206;
+  --radius: 8px;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --surface: #ffffff;
+    --card: #f5f7fb;
+    --border: #e1e6ef;
+    --text: #1b2432;
+    --muted: #5b6778;
+    --accent: #9a5f12;
+    --accent-ink: #ffffff;
+    color-scheme: light;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+}
+
+.skip:focus {
+  left: 16px;
+}
+
+.bar,
+main,
+.foot {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 64px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.mark {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+.repo {
+  font-size: 15px;
+}
+
+h1 {
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0 0 20px;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 26px;
+  margin: 0 0 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 18px;
+  margin: 16px 0 6px;
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+section {
+  padding: 64px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 56px;
+  align-items: center;
+}
+
+.hero .copy p {
+  font-size: 19px;
+  max-width: 34em;
+}
+
+.cta {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-top: 28px;
+}
+
+.button {
+  background: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+}
+
+.quiet {
+  text-decoration: none;
+}
+
+.shot {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    var(--card);
+}
+
+.shot img,
+.cards img,
+.video img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.cards img {
+  aspect-ratio: 1 / 1.15;
+  object-fit: cover;
+  object-position: top;
+}
+
+.demo .video {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 300px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.demo .video img {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+}
+
+.install ol {
+  padding-left: 22px;
+  max-width: 44em;
+}
+
+.install li {
+  margin-bottom: 14px;
+}
+
+pre {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 10px 0 0;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+}
+
+.faq details {
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+  max-width: 44em;
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.faq details p {
+  margin: 10px 0 0;
+}
+
+.foot {
+  padding: 32px 24px 48px;
+}
+
+.foot p {
+  font-size: 14px;
+}
+
+@media (max-width: 820px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+  .shot {
+    max-width: 360px;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+    max-width: 360px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
