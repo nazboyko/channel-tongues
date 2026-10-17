@@ -125,9 +125,9 @@ func TestJobsRoundTrip(t *testing.T) {
 	s.SaveJob(JobRow{ID: "j1", VideoID: "v", State: "running", SourceTitle: "t", Languages: "es,de"})
 	s.SaveJob(JobRow{ID: "j1", State: "done"})
 	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "x", Seconds: 1.5})
-	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "y", Edited: true, BackTitle: "back", Added: "quiet,calm"})
+	s.SaveTranslation(TranslationRow{JobID: "j1", Lang: "es", Status: "ready", Title: "y", Edited: true, BackTitle: "back", Added: "quiet,calm", AddedLine: "calm"})
 	j, ts, ok, err := s.LoadJob("j1")
-	if !ok || err != nil || j.State != "done" || j.Languages != "es,de" || len(ts) != 1 || ts[0].Title != "y" || !ts[0].Edited || ts[0].BackTitle != "back" || ts[0].Added != "quiet,calm" {
+	if !ok || err != nil || j.State != "done" || j.Languages != "es,de" || len(ts) != 1 || ts[0].Title != "y" || !ts[0].Edited || ts[0].BackTitle != "back" || ts[0].Added != "quiet,calm" || ts[0].AddedLine != "calm" {
 		t.Fatalf("got %+v %+v %v %v", j, ts, ok, err)
 	}
 	if _, _, ok, _ := s.LoadJob("nope"); ok {

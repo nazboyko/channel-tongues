@@ -10,23 +10,23 @@
     },
     "de": {
       "title": "Herbstliche Laterne auf der Veranda · Nasse Blätter · 3 Stunden",
-      "description": "Eine Laterne leuchtet auf einer Holzveranda, während nasse Blätter in der Dunkelheit herabtreiben. Sanfter Wind, leichter Regen, keine Musik.\n\nFür den besten Schlaf mit Kopfhörern hören.\n⟦1⟧ ⟦2⟧",
+      "description": "Eine Laterne leuchtet auf einer Holzveranda, während nasse Blätter in der Dunkelheit herabsinken. Sanfter Wind, leichter Regen, keine Musik.\n\nFür den besten Schlaf mit Kopfhörern hören.\n⟦1⟧ ⟦2⟧",
       "back": {
         "title": "Autumnal lantern on the veranda · Wet leaves · 3 hours",
-        "line": "A lantern glows on a wooden veranda, while wet leaves drift down in the darkness. Gentle wind, light rain, no music."
+        "line": "A lantern glows on a wooden veranda, while wet leaves sink down in the darkness. Gentle wind, light rain, no music."
       }
     },
     "es": {
       "title": "Linterna de otoño en el porche · Hojas mojadas · 3 horas",
-      "description": "Una linterna brilla en un porche de madera mientras hojas mojadas caen en la oscuridad. Viento suave, lluvia ligera, sin música.\n\nEscucha con auriculares para dormir mejor.\n⟦1⟧ ⟦2⟧",
+      "description": "Una linterna brilla en un porche de madera mientras las hojas mojadas caen en la oscuridad. Viento suave, lluvia ligera, sin música.\n\nEscucha con auriculares para dormir mejor.\n⟦1⟧ ⟦2⟧",
       "back": {
         "title": "Autumn lantern on the porch · Wet leaves · 3 hours",
-        "line": "A lantern shines on a wooden porch while wet leaves fall in the darkness. Soft wind, light rain, no music."
+        "line": "A lantern shines on a wooden porch while wet leaves fall in the darkness. Gentle wind, light rain, no music."
       }
     },
     "fr": {
       "title": "Lanterne sur le porche en automne · Feuilles mouillées · 3 heures",
-      "description": "Une lanterne brille sur un porche en bois tandis que des feuilles mouillées tombent dans l'obscurité. Vent léger, pluie fine, sans musique.\n\nÉcoutez avec un casque pour un meilleur sommeil.\n⟦1⟧ ⟦2⟧",
+      "description": "Une lanterne brille sur un porche en bois pendant que des feuilles mouillées tombent dans l'obscurité. Vent léger, pluie fine, sans musique.\n\nÉcoutez avec un casque pour un meilleur sommeil.\n⟦1⟧ ⟦2⟧",
       "back": {
         "title": "Lantern on the porch in autumn · Wet leaves · 3 hours",
         "line": "A lantern shines on a wooden porch while wet leaves fall in the darkness. Light wind, fine rain, no music."
@@ -58,7 +58,7 @@
     },
     "ko": {
       "title": "가을 테라스 랜턴 · 젖은 낙엽 · 3시간",
-      "description": "어둠 속에서 젖은 낙엽이 떨어지는 동안 나무 테라스 위 랜턴이 빛납니다. 부드러운 바람, 가벼운 비, 음악 없음.\n\n가장 편안한 잠을 위해 헤드폰으로 감상하세요.\n⟦1⟧ ⟦2⟧",
+      "description": "어둠 속에서 젖은 낙엽이 떨어지는 동안 나무 테라스 위 랜턴이 빛납니다. 부드러운 바람, 가벼운 비, 음악 없음.\n\n최상의 수면을 위해 헤드폰으로 감상하세요.\n⟦1⟧ ⟦2⟧",
       "back": {
         "title": "Autumn Terrace Lantern · Wet Fallen Leaves · 3 Hours",
         "line": "While wet fallen leaves drop in the darkness, a lantern shines atop a wooden terrace. Soft wind, light rain, no music."
@@ -73,11 +73,11 @@
       }
     },
     "th": {
-      "title": "ตะเกียงที่ระเบียงในฤดูใบไม้ร่วง · ใบไม้เปียกชื้น · 3 ชั่วโมง",
-      "description": "แสงตะเกียงส่องสว่างบนระเบียงไม้ท่ามกลางใบไม้เปียกชื้นที่ร่วงหล่นในความมืด ลมพัดเบาๆ ฝนตกปรอยๆ ไม่มีดนตรีประกอบ\n\nฟังด้วยหูฟังเพื่อการนอนหลับที่ดีที่สุด\n⟦1⟧ ⟦2⟧",
+      "title": "ตะเกียงริมระเบียงฤดูใบไม้ร่วง · ใบไม้เปียกชื้น · 3 ชั่วโมง",
+      "description": "แสงตะเกียงส่องสว่างบนระเบียงไม้ท่ามกลางใบไม้เปียกชื้นที่ร่วงหล่นในความมืด ลมพัดเบาๆ ฝนตกปรอยๆ ไม่มีดนตรีประกอบ\n\nแนะนำให้ฟังด้วยหูฟังเพื่อการนอนหลับที่ดีที่สุด\n⟦1⟧ ⟦2⟧",
       "back": {
-        "title": "Autumn balcony lamp · Wet leaves · 3 hours",
-        "line": "Lamp light shines on a wooden balcony amidst wet leaves falling in the darkness. A gentle breeze blows, light rain falls, no background music."
+        "title": "Autumn Balcony Lantern · Wet Leaves · 3 Hours",
+        "line": "Lantern light shines on a wooden balcony amidst wet leaves falling in the darkness. A gentle breeze blows, light rain falls, no background music."
       },
       "new": [
         "amidst",
@@ -86,11 +86,11 @@
       ]
     },
     "tr": {
-      "title": "Sonbahar Verandasında Fener · Islak Yapraklar · 3 Saat",
+      "title": "Sonbahar Verandası Feneri · Islak Yapraklar · 3 Saat",
       "description": "Karanlıkta ıslak yapraklar süzülürken ahşap bir verandada bir fener parlıyor. Hafif rüzgar, hafif yağmur, müzik yok.\n\nEn iyi uyku için kulaklıkla dinleyin.\n⟦1⟧ ⟦2⟧",
       "back": {
-        "title": "Lantern on an Autumn Veranda · Wet Leaves · 3 Hours",
-        "line": "As wet leaves drift in the darkness, a lantern shines on a wooden veranda. Light wind, light rain, no music."
+        "title": "Autumn Porch Lantern · Wet Leaves · 3 Hours",
+        "line": "As wet leaves drift in the darkness, a lantern shines on a wooden porch. Light wind, light rain, no music."
       }
     },
     "vi": {
@@ -104,12 +104,16 @@
   },
   "Morning Harbor · Gulls and Light Waves": {
     "ar": {
-      "title": "مرفأ في الصباح · طيور النورس والأمواج الخفيفة",
-      "description": "مرفأ صيد صغير يستيقظ: نداء طيور النورس، واصطدام القوارب بالرصيف، وتدفق الأمواج الخفيفة.\n\n⟦1⟧ الضوء الأول\n⟦2⟧ القوارب تغادر المرفأ\n⟦3⟧ هدوء الظهيرة\n\nتم التصوير والتسجيل بواسطة ⟦4⟧. للاستفسارات: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
+      "title": "مرفأ الصباح · طيور النورس والأمواج الهادئة",
+      "description": "يستيقظ مرفأ صيد صغير: نداء طيور النورس، واصطدام القوارب بالرصيف، وتدفق الأمواج الخفيفة.\n\n⟦1⟧ الضوء الأول\n⟦2⟧ القوارب تغادر المرفأ\n⟦3⟧ هدوء منتصف النهار\n\nتم التصوير والتسجيل بواسطة ⟦4⟧. للاستفسارات: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
       "back": {
-        "title": "A harbor in the morning · Seagulls and gentle waves",
+        "title": "Al-Sabah Harbor · Seagulls and Calm Waves",
         "line": "A small fishing harbor wakes up: the call of seagulls, the bumping of boats against the pier, and the flow of gentle waves."
-      }
+      },
+      "new": [
+        "Sabah",
+        "flow"
+      ]
     },
     "de": {
       "title": "Morgendlicher Hafen · Möwen und sanfte Wellen",
@@ -152,14 +156,11 @@
       "back": {
         "title": "Harbor in the Morning · Seagulls and Gentle Waves",
         "line": "A small fishing harbor begins to wake up: the sound of seagulls, boats bumping against the pier, and the gentle crashing of waves."
-      },
-      "new": [
-        "begins"
-      ]
+      }
     },
     "ja": {
       "title": "朝の港 · カモメとさざ波",
-      "description": "小さな漁港の目覚め：カモメの鳴き声、桟橋に当たる舟の音、そして寄せては返すさざ波。\n\n⟦1⟧ 最初の光\n⟦2⟧ 出港する舟\n⟦3⟧ 真昼の静寂\n\n撮影・録音：⟦4⟧。お問い合わせ：⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
+      "description": "小さな漁港の目覚め：カモメの鳴き声、桟橋に当たる舟の音、そして寄せては返すさざ波。\n\n⟦1⟧ 最初の光\n⟦2⟧ 港を出発する舟\n⟦3⟧ 真昼の静寂\n\n撮影・録音：⟦4⟧。お問い合わせ：⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
       "back": {
         "title": "Morning Harbor · Seagulls and Ripples",
         "line": "The awakening of a small fishing port: the cries of seagulls, the sound of boats hitting the pier, and the ebbing and flowing ripples."
@@ -171,26 +172,26 @@
     },
     "ko": {
       "title": "아침 항구 · 갈매기와 잔물결",
-      "description": "작은 어항이 깨어납니다: 갈매기가 울고, 배들이 부두에 부딪히며, 잔물결이 밀려옵니다.\n\n⟦1⟧ 첫 빛\n⟦2⟧ 항구를 떠나는 배들\n⟦3⟧ 한낮의 평온함\n\n촬영 및 녹음: ⟦4⟧. 문의: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
+      "description": "작은 어항이 깨어납니다: 갈매기가 울고, 배들은 부두에 부딪히며, 잔물결이 밀려옵니다.\n\n⟦1⟧ 첫 빛\n⟦2⟧ 항구를 떠나는 배들\n⟦3⟧ 한낮의 평온함\n\n촬영 및 녹음: ⟦4⟧. 문의: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
       "back": {
         "title": "Morning Harbor · Seagulls and Ripples",
-        "line": "A small fishing village wakes up: seagulls cry, boats bump against the pier, and ripples roll in."
+        "line": "A small fishing village wakes up: seagulls cry, boats bump against the pier, and ripples wash in."
       },
       "new": [
         "village"
       ]
     },
     "pt-BR": {
-      "title": "Porto pela manhã · Gaivotas e ondas suaves",
-      "description": "Um pequeno porto de pesca desperta: gaivotas chamam, barcos batem no píer e ondas suaves chegam.\n\n⟦1⟧ Primeira luz\n⟦2⟧ Barcos saindo do porto\n⟦3⟧ Calmaria do meio-dia\n\nFilmado e gravado por ⟦4⟧. Perguntas: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
+      "title": "Porto pela manhã · Gaivotas e ondas leves",
+      "description": "Um pequeno porto de pesca desperta: gaivotas chamam, barcos batem no píer e ondas leves chegam.\n\n⟦1⟧ Primeira luz\n⟦2⟧ Barcos saindo do porto\n⟦3⟧ Calmaria do meio-dia\n\nFilmado e gravado por ⟦4⟧. Perguntas: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
       "back": {
-        "title": "Port by morning · Seagulls and gentle waves",
-        "line": "A small fishing port awakens: seagulls call, boats bump against the pier and gentle waves arrive."
+        "title": "Port by morning · Seagulls and light waves",
+        "line": "A small fishing port awakens: seagulls call, boats bump against the pier and light waves arrive."
       }
     },
     "th": {
       "title": "ท่าเรือยามเช้า · เสียงนกนางนวลและระลอกคลื่น",
-      "description": "ท่าเรือประมงเล็กๆ กำลังตื่นจากการหลับใหล: เสียงนกนางนวลร้อง เรือกระทบกับท่าเทียบเรือ และระลอกคลื่นที่พัดเข้ามา\n\n⟦1⟧ แสงแรก\n⟦2⟧ เรือออกจากท่า\n⟦3⟧ ความสงบยามเที่ยง\n\nถ่ายทำและบันทึกเสียงโดย ⟦4⟧ ติดต่อสอบถาม: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
+      "description": "ท่าเรือประมงเล็กๆ กำลังตื่นจากการหลับใหล: เสียงนกนางนวลร้อง เรือกระทบกับท่าเทียบเรือ และระลอกคลื่นที่พัดเข้ามา\n\n⟦1⟧ แสงแรก\n⟦2⟧ เรือออกจากท่า\n⟦3⟧ ความสงบยามเที่ยง\n\nถ่ายทำและบันทึกเสียงโดย ⟦4⟧ สอบถามข้อมูลได้ที่: ⟦5⟧\n⟦6⟧ ⟦7⟧ ⟦8⟧",
       "back": {
         "title": "Morning Pier · Sounds of seagulls and ripples",
         "line": "A small fishing pier is waking from its slumber: the sound of seagulls crying, boats bumping against the pier, and ripples washing in"
@@ -222,7 +223,7 @@
   },
   "Rain on a Cabin Window at Night · 3 Hours of Sleep Sounds": {
     "ar": {
-      "title": "صوت المطر على نافذة كوخ في الليل · 3 ساعات من أصوات النوم",
+      "title": "صوت المطر على نافذة كوخ ليلاً · 3 ساعات من أصوات النوم",
       "description": "ثلاث ساعات من المطر الخفيف على نافذة كوخ خشبي، تم تسجيلها في ليلة خريفية هادئة. لا توجد إعلانات في منتصف الفيديو.\n\n⟦1⟧ يبدأ المطر\n⟦2⟧ رعد بعيد\n⟦3⟧ يهدأ المطر\n\nالمزيد من الليالي في ⟦4⟧\n⟦5⟧ ⟦6⟧",
       "back": {
         "title": "Sound of rain on a cabin window at night · 3 hours of sleep sounds",
@@ -254,15 +255,15 @@
       }
     },
     "hi": {
-      "title": "रात में केबिन की खिड़की पर बारिश · नींद के लिए 3 घंटे की आवाज़ें",
-      "description": "एक शांत शरद ऋतु की रात में रिकॉर्ड की गई, लकड़ी के केबिन की खिड़की पर तीन घंटे की हल्की बारिश। वीडियो के बीच में कोई विज्ञापन नहीं।\n\n⟦1⟧ बारिश शुरू होती है\n⟦2⟧ दूर गूंजता बादल\n⟦3⟧ बारिश धीमी हो जाती है\n\n⟦4⟧ पर और भी रातें\n⟦5⟧ ⟦6⟧",
+      "title": "रात में केबिन की खिड़की पर बारिश · सोने के लिए 3 घंटे की आवाज़ें",
+      "description": "एक शांत शरद ऋतु की रात में रिकॉर्ड की गई, लकड़ी के केबिन की खिड़की पर तीन घंटे की हल्की बारिश। वीडियो के बीच में कोई विज्ञापन नहीं।\n\n⟦1⟧ बारिश शुरू होती है\n⟦2⟧ दूर की गड़गड़ाहट\n⟦3⟧ बारिश धीमी हो जाती है\n\n⟦4⟧ पर और भी रातें\n⟦5⟧ ⟦6⟧",
       "back": {
-        "title": "Rain on a cabin window at night · 3 hours of sounds for sleep",
+        "title": "Rain on the cabin window at night · 3 hours of sounds for sleeping",
         "line": "Recorded on a quiet autumn night, three hours of light rain on a wooden cabin window. No advertisements in the middle of the video."
       }
     },
     "id": {
-      "title": "Hujan di Jendela Kabin Saat Malam · 3 Jam Suara Tidur",
+      "title": "Hujan di Jendela Kabin saat Malam Hari · 3 Jam Suara Tidur",
       "description": "Tiga jam suara hujan lembut di jendela kabin kayu, direkam pada malam musim gugur yang tenang. Tanpa iklan di tengah video.\n\n⟦1⟧ Hujan mulai turun\n⟦2⟧ Guntur di kejauhan\n⟦3⟧ Hujan mulai mereda\n\nLebih banyak malam di ⟦4⟧\n⟦5⟧ ⟦6⟧",
       "back": {
         "title": "Rain on the Cabin Window at Night · 3 Hours Sleep Sounds",
@@ -292,11 +293,14 @@
     },
     "ko": {
       "title": "밤의 오두막 창가에 내리는 빗소리 · 3시간 수면 유도 사운드",
-      "description": "조용한 가을 밤, 나무 오두막 창가에 내리는 부드러운 빗소리 3시간입니다. 영상 중간에 광고가 없습니다.\n\n⟦1⟧ 빗소리 시작\n⟦2⟧ 멀리서 들리는 천둥소리\n⟦3⟧ 빗소리가 잦아듦\n\n⟦4⟧에서 더 많은 밤의 소리\n⟦5⟧ ⟦6⟧",
+      "description": "조용한 가을 밤에 녹음한 나무 오두막 창가의 부드러운 빗소리 3시간입니다. 영상 중간에 광고가 없습니다.\n\n⟦1⟧ 빗소리 시작\n⟦2⟧ 멀리서 들리는 천둥소리\n⟦3⟧ 빗소리가 잦아듦\n\n⟦4⟧에서 보내는 더 많은 밤\n⟦5⟧ ⟦6⟧",
       "back": {
         "title": "Sound of rain falling on a cabin window at night · 3 hours of sleep-inducing sound",
-        "line": "It is 3 hours of soft rain falling on a wooden cabin window on a quiet autumn night. There are no advertisements in the middle of the video."
-      }
+        "line": "This is 3 hours of soft rain sounds by a wooden cabin window recorded on a quiet autumn night. There are no advertisements in the middle of the video."
+      },
+      "new": [
+        "inducing"
+      ]
     },
     "pt-BR": {
       "title": "Chuva na Janela de uma Cabana à Noite · 3 Horas de Sons para Dormir",
@@ -326,15 +330,16 @@
         "line": "Three hours of light rain hitting a wooden mountain cabin window, recorded on a quiet autumn night. There are no ads in the middle of the video."
       },
       "new": [
-        "Mountain"
+        "Mountain",
+        "hitting"
       ]
     },
     "vi": {
-      "title": "Tiếng mưa rơi trên cửa sổ cabin vào ban đêm · 3 giờ âm thanh ngủ ngon",
-      "description": "Ba giờ tiếng mưa rơi nhẹ nhàng trên cửa sổ cabin gỗ, được ghi lại vào một đêm thu yên tĩnh. Không có quảng cáo giữa video.\n\n⟦1⟧ Mưa bắt đầu\n⟦2⟧ Tiếng sấm xa xăm\n⟦3⟧ Mưa nhỏ dần\n\nThêm nhiều đêm nữa tại ⟦4⟧\n⟦5⟧ ⟦6⟧",
+      "title": "Tiếng mưa rơi trên cửa sổ nhà gỗ vào ban đêm · 3 giờ âm thanh ngủ ngon",
+      "description": "Ba giờ tiếng mưa rơi nhẹ nhàng trên cửa sổ nhà gỗ, được ghi lại vào một đêm thu yên tĩnh. Không có quảng cáo giữa video.\n\n⟦1⟧ Mưa bắt đầu\n⟦2⟧ Tiếng sấm xa xăm\n⟦3⟧ Mưa nhỏ dần\n\nThêm nhiều đêm nữa tại ⟦4⟧\n⟦5⟧ ⟦6⟧",
       "back": {
-        "title": "Sound of rain falling on the cabin window at night · 3 hours of good sleep sounds",
-        "line": "Three hours of rain falling gently on the wooden cabin window, recorded on a quiet autumn night. No advertisements during the video."
+        "title": "Sound of rain falling on the wooden house window at night · 3 hours good sleep sound",
+        "line": "Three hours of rain falling gently on the wooden house window, recorded on a quiet autumn night. No advertisements in the middle of the video."
       },
       "new": [
         "falling",

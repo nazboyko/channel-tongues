@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/nazboyko/channel-tongues/internal/langs"
 )
 
 func TestCandidateWords(t *testing.T) {
@@ -211,5 +213,82 @@ func TestWordTestOnlyForEnglishSources(t *testing.T) {
 	res := (&Engine{Model: m, BackTranslate: true}).Run(context.Background(), src, []string{"es"}, nil, nil)
 	if res[0].Status != StatusReady || len(res[0].Added) != 0 || res[0].BackTitle == "" {
 		t.Fatalf("for a Japanese source the line is shown, the word test is skipped: %+v", res[0])
+	}
+}
+
+// The source of a real test video: "made with AI tools". The read-backs of
+// most languages say "created", which the confirming step did not accept.
+func lakeRun(t *testing.T, codes []string, backs map[string]Back) []Result {
+	t.Helper()
+	answers := map[string][]func(Request) (Output, error){}
+	for _, c := range codes {
+		answers[c] = []func(Request) (Output, error){answer("lago de otoño 30s", "El pueblo es imaginado. La imagen y la música se hicieron con herramientas de IA y se juntaron a mano.\n\n⟦1⟧: lugares tranquilos y piano suave.")}
+	}
+	m := &scripted{answers: answers, backs: backs}
+	src := Source{Title: "autumn lake 30s", Description: wrappedSource, Language: "en"}
+	return (&Engine{Model: m, BackTranslate: true}).Run(context.Background(), src, codes, []string{"The Living Postcard"}, nil)
+}
+
+func TestReadBackWordInMostLanguagesIsNotFlagged(t *testing.T) {
+	codes := []string{"es", "pt-BR", "hi", "id", "ja", "de", "vi", "tr", "ko", "fr", "ar", "th", "pl", "ru", "uk"}
+	created := Back{Title: "autumn lake 30s", Line: "The town is imagined, not a real place. The picture and the music were created with AI tools and put together by hand."}
+	plain := Back{Title: "autumn lake 30s", Line: "The town is imagined, not a real place. The picture and the music were made with AI tools and put together by hand."}
+	backs := map[string]Back{}
+	for i, c := range codes {
+		backs[c] = plain
+		if i < 10 {
+			backs[c] = created
+		}
+	}
+	backs["tr"] = Back{Title: "mountain lake 30s", Line: created.Line} // a real change in the title
+	res := lakeRun(t, codes, backs)
+	for _, r := range res {
+		for _, w := range r.Added {
+			if strings.EqualFold(w, "created") {
+				t.Fatalf("%s: created comes from the read-back wording and must not be marked: %+v", r.Lang, r)
+			}
+		}
+		if r.Lang == "tr" {
+			if r.Status != StatusCheck || r.Note != "adds: mountain" {
+				t.Fatalf("Turkish mountain must still be caught: %+v", r)
+			}
+			continue
+		}
+		// The stub answers Spanish for every language, so non-Latin ones fail
+		// their script check; only the read-back reasons matter here.
+		if strings.HasPrefix(r.Note, "adds") {
+			t.Fatalf("%s must not be flagged by the read-back: %+v", r.Lang, r)
+		}
+		if strings.HasPrefix(langNameScript(r.Lang), "Latin") && r.Status != StatusReady {
+			t.Fatalf("%s should be ready: %+v", r.Lang, r)
+		}
+	}
+}
+
+func langNameScript(code string) string {
+	l, _ := langs.Get(code)
+	return string(l.Script)
+}
+
+func TestSharedWordsNeedThreeLanguages(t *testing.T) {
+	backs := map[string]Back{
+		"es": {Title: "autumn lake 30s", Line: "The picture and the music were created with AI tools and put together by hand."},
+		"de": {Title: "autumn lake 30s", Line: "The picture and the music were created with AI tools and put together by hand."},
+	}
+	res := lakeRun(t, []string{"es", "de"}, backs)
+	for _, r := range res {
+		if len(r.AddedLine) != 1 || r.AddedLine[0] != "created" {
+			t.Fatalf("with two languages a word is not dropped as shared: %+v", r)
+		}
+	}
+}
+
+func TestDescriptionOnlyAdditionsLeaveTheCardTicked(t *testing.T) {
+	res := lakeRun(t, []string{"es"}, map[string]Back{
+		"es": {Title: "autumn lake 30s", Line: "The town is imagined, not a real place. The beautiful picture and the music were made with AI tools and put together by hand."},
+	})
+	r := res[0]
+	if r.Status != StatusReady || r.Note != "" || !reflect.DeepEqual(r.AddedLine, []string{"beautiful"}) || len(r.AddedTitle) != 0 {
+		t.Fatalf("a word added only in the description stays marked, the card stays ready: %+v", r)
 	}
 }

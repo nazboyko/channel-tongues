@@ -281,6 +281,8 @@ func printResults(results []translate.Result, full bool, sourceLang string) {
 		fmt.Printf("  %s %s %s %5.1fs  %s  %s\n", pad(langs.Name(r.Lang), 18), pad(r.Lang, 7), pad(statusWord(r.Status), 14), r.Duration.Seconds(), pad(truncate(r.Title, 44), 44), back)
 		if r.Note != "" {
 			fmt.Printf("  %s %s %s %s\n", pad("", 18), pad("", 7), pad("", 14), "  "+r.Note)
+		} else if len(r.AddedLine) > 0 {
+			fmt.Printf("  %s %s %s %s\n", pad("", 18), pad("", 7), pad("", 14), "  description adds: "+strings.ToLower(strings.Join(r.AddedLine, ", ")))
 		}
 	}
 	fmt.Printf("\n%d ready, %d to check.\n", ready, check)
@@ -358,7 +360,8 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 		fmt.Printf("measure: failed check x%d: %s\n", n, p)
 	}
 	var backSum, backMax float64
-	backs, flagged, backFailed := 0, 0, 0
+	backs, flagged, backFailed, lineOnly := 0, 0, 0, 0
+	shared := map[string]int{}
 	for _, r := range results {
 		if r.BackFailed {
 			backFailed++
@@ -370,13 +373,23 @@ func printMeasure(results []translate.Result, wall time.Duration, eng *translate
 		s := r.BackDuration.Seconds()
 		backSum += s
 		backMax = max(backMax, s)
-		if len(r.Added) > 0 {
+		for _, w := range r.Shared {
+			shared[strings.ToLower(w)]++
+		}
+		switch {
+		case len(r.AddedTitle) > 0:
 			flagged++
-			fmt.Printf("measure: back-translation %s adds %s: %s\n", r.Lang, strings.Join(r.Added, ", "), markAdded(r.BackTitle, r.Added)+" / "+markAdded(r.BackLine, r.Added))
+			fmt.Printf("measure: back-translation %s title adds %s: %s\n", r.Lang, strings.Join(r.AddedTitle, ", "), markAdded(r.BackTitle, r.Added)+" / "+markAdded(r.BackLine, r.Added))
+		case len(r.AddedLine) > 0:
+			lineOnly++
+			fmt.Printf("measure: back-translation %s description adds %s (card stays ticked): %s\n", r.Lang, strings.Join(r.AddedLine, ", "), markAdded(r.BackLine, r.Added))
 		}
 	}
 	if backs > 0 {
-		fmt.Printf("measure: back-translation on %d languages, extra %.2fs mean, %.2fs max per language (runs next to the next language), %d flagged\n", backs, backSum/float64(backs), backMax, flagged)
+		fmt.Printf("measure: back-translation on %d languages, extra %.2fs mean, %.2fs max per language (runs next to the next language), %d unticked by title words, %d marked in the description only\n", backs, backSum/float64(backs), backMax, flagged, lineOnly)
+	}
+	for w, n := range shared {
+		fmt.Printf("measure: %q dropped in %d languages as the read-back's own wording\n", w, n)
 	}
 	if backFailed > 0 {
 		fmt.Printf("measure: back-translation failed on %d languages (marked Check this one)\n", backFailed)

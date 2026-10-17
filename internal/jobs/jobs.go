@@ -49,6 +49,9 @@ type Lang struct {
 	BackTitle string   `json:"backTitle,omitempty"`
 	BackLine  string   `json:"backLine,omitempty"`
 	Added     []string `json:"added,omitempty"`
+	// AddedLine are the marked words found only in the description; they do
+	// not untick the card.
+	AddedLine []string `json:"addedLine,omitempty"`
 }
 
 // Snapshot is a job as the panel sees it.
@@ -161,7 +164,7 @@ func (r *Runner) run(ctx context.Context, j *job) {
 				l.Note = ev.Result.Note
 				l.Seconds = ev.Result.Duration.Seconds()
 				l.Retries = ev.Result.Retries
-				l.BackTitle, l.BackLine, l.Added = ev.Result.BackTitle, ev.Result.BackLine, ev.Result.Added
+				l.BackTitle, l.BackLine, l.Added, l.AddedLine = ev.Result.BackTitle, ev.Result.BackLine, ev.Result.Added, ev.Result.AddedLine
 				j.results[ev.Lang] = *ev.Result
 			}
 			copyL := *l
@@ -187,7 +190,7 @@ func (r *Runner) run(ctx context.Context, j *job) {
 		l := j.langs[res.Lang]
 		l.Status, l.Note = res.Status, res.Note
 		l.Seconds, l.Retries = res.Duration.Seconds(), res.Retries
-		l.BackTitle, l.BackLine, l.Added = res.BackTitle, res.BackLine, res.Added
+		l.BackTitle, l.BackLine, l.Added, l.AddedLine = res.BackTitle, res.BackLine, res.Added, res.AddedLine
 		if !l.Edited { // the person's own text wins over the model's
 			l.Title, l.Description = res.Title, res.Description
 		}
@@ -195,7 +198,7 @@ func (r *Runner) run(ctx context.Context, j *job) {
 		r.Store.SaveTranslation(store.TranslationRow{
 			JobID: j.id, Lang: res.Lang, Status: string(res.Status), Title: l.Title, Description: l.Description,
 			Note: res.Note, Seconds: res.Duration.Seconds(), Retries: res.Retries, Edited: l.Edited,
-			BackTitle: res.BackTitle, BackLine: res.BackLine, Added: strings.Join(res.Added, ","),
+			BackTitle: res.BackTitle, BackLine: res.BackLine, Added: strings.Join(res.Added, ","), AddedLine: strings.Join(res.AddedLine, ","),
 		})
 	}
 	r.Store.SaveJob(store.JobRow{ID: j.id, State: j.state})
@@ -255,6 +258,9 @@ func (r *Runner) get(id string) (*job, error) {
 			l.BackTitle, l.BackLine = t.BackTitle, t.BackLine
 			if t.Added != "" {
 				l.Added = strings.Split(t.Added, ",")
+			}
+			if t.AddedLine != "" {
+				l.AddedLine = strings.Split(t.AddedLine, ",")
 			}
 		}
 	}
@@ -368,7 +374,7 @@ func (r *Runner) Edit(id, code, title, description string) (Lang, error) {
 	r.Store.SaveTranslation(store.TranslationRow{
 		JobID: j.id, Lang: code, Status: string(l.Status), Title: title, Description: description,
 		Note: l.Note, Seconds: l.Seconds, Retries: l.Retries, Edited: true,
-		BackTitle: l.BackTitle, BackLine: l.BackLine, Added: strings.Join(l.Added, ","),
+		BackTitle: l.BackTitle, BackLine: l.BackLine, Added: strings.Join(l.Added, ","), AddedLine: strings.Join(l.AddedLine, ","),
 	})
 	return *l, nil
 }

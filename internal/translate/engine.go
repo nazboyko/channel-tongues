@@ -66,7 +66,10 @@ type Result struct {
 	// the words in it that the source does not have.
 	BackTitle    string        `json:"backTitle,omitempty"`
 	BackLine     string        `json:"backLine,omitempty"`
-	Added        []string      `json:"added,omitempty"`
+	Added        []string      `json:"added,omitempty"`      // every marked word
+	AddedTitle   []string      `json:"addedTitle,omitempty"` // marked words of the title: these untick the card
+	AddedLine    []string      `json:"addedLine,omitempty"`  // marked words of the description only
+	Shared       []string      `json:"-"`                    // dropped as the read-back's own wording, for measurements
 	BackDuration time.Duration `json:"-"`
 	BackFailed   bool          `json:"-"`
 	RawBack      Back          `json:"-"` // with placeholders, for recording samples
@@ -107,7 +110,7 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 	var prot Protected
 	protSrc := Output{
 		Title:       prot.Protect(src.Title, keep),
-		Description: prot.Protect(src.Description, keep),
+		Description: JoinSoftWraps(prot.Protect(src.Description, keep)),
 	}
 	kind := VideoKind(protSrc.Title, protSrc.Description)
 
@@ -165,6 +168,11 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 	}
 	wg.Wait()
 	backs.Wait()
+	if e.BackTranslate {
+		for _, i := range dropSharedAdditions(results) {
+			send(Event{Lang: results[i].Lang, Status: results[i].Status, Result: &results[i]})
+		}
+	}
 	for i, lang := range targets {
 		if results[i].Lang == "" { // never started: cancelled before its turn
 			results[i] = Result{Lang: lang, Status: StatusCancelled}
@@ -292,7 +300,8 @@ func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Pro
 		return
 	}
 	original := Back{Title: protSrc.Title, Line: firstLine(protSrc.Description)}
-	candidates := CandidateWords(original, bt)
+	titleWords, lineWords := fieldCandidates(original, bt)
+	candidates := append(append([]string(nil), titleWords...), lineWords...)
 	if len(candidates) == 0 {
 		return
 	}
@@ -309,13 +318,111 @@ func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Pro
 		added = candidates // the confirming call failed: flag every candidate, the safe side
 	}
 	r.Added = added
+	r.AddedTitle = intersect(added, titleWords)
+	r.AddedLine = intersect(added, lineWords)
 	if len(added) > 0 {
 		r.Problems = append(r.Problems, addedReason(added))
 	}
-	if len(added) > 0 && r.Status == StatusReady {
+	// Only the title unticks the card: it is what viewers see first and what
+	// a wrong word costs most in. Description words stay marked in the line.
+	if len(r.AddedTitle) > 0 && r.Status == StatusReady {
 		r.Status = StatusCheck
-		r.Note = addedReason(added)
+		r.Note = addedReason(r.AddedTitle)
 	}
+}
+
+// intersect keeps the words of a that are in b, in a's order.
+func intersect(a, b []string) []string {
+	in := map[string]bool{}
+	for _, w := range b {
+		in[strings.ToLower(w)] = true
+	}
+	var out []string
+	for _, w := range a {
+		if in[strings.ToLower(w)] {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// dropSharedAdditions removes words that the read-backs of at least half the
+// languages (and at least three) mark: the same English word in most
+// read-backs comes from how the model reads back ("created" for "made"), not
+// from the translations. A word another check names stays marked. It returns
+// the results that changed.
+func dropSharedAdditions(results []Result) []int {
+	n := 0
+	counts := map[string]int{}
+	for _, r := range results {
+		if r.BackTitle == "" {
+			continue
+		}
+		n++
+		seen := map[string]bool{}
+		for _, w := range r.Added {
+			if s := stem(strings.ToLower(w)); !seen[s] {
+				seen[s] = true
+				counts[s]++
+			}
+		}
+	}
+	need := max(3, (n+1)/2)
+	shared := map[string]bool{}
+	for s, c := range counts {
+		if c >= need {
+			shared[s] = true
+		}
+	}
+	if len(shared) == 0 {
+		return nil
+	}
+	var changed []int
+	for i := range results {
+		r := &results[i]
+		if len(r.Added) == 0 {
+			continue
+		}
+		otherNote := ""
+		if !strings.HasPrefix(r.Note, "adds: ") {
+			otherNote = strings.ToLower(r.Note)
+		}
+		keep := func(words []string) []string {
+			var out []string
+			for _, w := range words {
+				lw := strings.ToLower(w)
+				if !shared[stem(lw)] || (otherNote != "" && strings.Contains(otherNote, lw)) {
+					out = append(out, w)
+				} else if !contains(r.Shared, w) {
+					r.Shared = append(r.Shared, w)
+				}
+			}
+			return out
+		}
+		before := len(r.Added)
+		r.Added, r.AddedTitle, r.AddedLine = keep(r.Added), keep(r.AddedTitle), keep(r.AddedLine)
+		if len(r.Added) == before {
+			continue
+		}
+		if strings.HasPrefix(r.Note, "adds: ") {
+			if len(r.AddedTitle) > 0 {
+				r.Note = addedReason(r.AddedTitle)
+			} else {
+				r.Status, r.Note = StatusReady, ""
+			}
+		}
+		changed = append(changed, i)
+	}
+	return changed
+}
+
+func contains(list []string, w string) bool {
+	for _, x := range list {
+		if strings.EqualFold(x, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func addedReason(words []string) string {

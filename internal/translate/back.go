@@ -42,7 +42,7 @@ Reply with JSON only: {"title": "...", "line": "..."}`
 var backSchema = json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"},"line":{"type":"string"}},"required":["title","line"]}`)
 
 const newWordsSystem = `For each listed word from a back-translation, find the words in the original that say the same thing: the same word, another form of it, a synonym (hut and cabin, advertisements and ads, calm and quiet, light and soft), a word the original's phrase needs in plain language (rain falling on a window for rain on a window), or a plain name for what the original describes (the sound of gulls for gulls call, the shore for waves rolling in, released or uploaded for new videos).
-A word that adds a quality, a feeling, a place or a purpose the original does not state (cozy, stunning, best, forest, holiday, to unwind) is not a match.
+A word that adds a quality, a feeling, a place or a purpose the original does not state (famous, award-winning, Swiss, sponsored, for kids, free) is not a match.
 Reply with JSON only: {"matches": [{"word": "...", "original": "..."}]}, one entry per listed word. Copy the matching words from the original into "original", or leave it "" when the original says nothing like it.`
 
 var newWordsSchema = json.RawMessage(`{"type":"object","properties":{"matches":{"type":"array","items":{"type":"object","properties":{"word":{"type":"string"},"original":{"type":"string"}},"required":["word","original"]}}},"required":["matches"]}`)

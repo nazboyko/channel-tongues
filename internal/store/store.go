@@ -62,6 +62,7 @@ var migrations = []string{
 	`ALTER TABLE translations ADD COLUMN back_title TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE translations ADD COLUMN back_line TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE translations ADD COLUMN added TEXT NOT NULL DEFAULT '';`,
+	`ALTER TABLE translations ADD COLUMN added_line TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (and creates) the database at path and applies migrations.
@@ -104,7 +105,7 @@ func (s *Store) migrate() error {
 		}
 		if _, err := tx.Exec(migrations[i]); err != nil {
 			tx.Rollback()
-			if i == 1 && strings.Contains(err.Error(), "duplicate column name") {
+			if (i == 1 || i == 2) && strings.Contains(err.Error(), "duplicate column name") {
 				// Another process added the columns a moment ago.
 				if _, err := s.db.Exec(`UPDATE schema_version SET version = ?`, i+1); err != nil {
 					return err
@@ -292,7 +293,8 @@ type TranslationRow struct {
 	Edited      bool
 	BackTitle   string
 	BackLine    string
-	Added       string // comma-separated
+	Added       string // comma-separated, every marked word
+	AddedLine   string // comma-separated, the ones only in the description
 }
 
 // SaveJob inserts or updates a job.
@@ -313,13 +315,13 @@ func (s *Store) SaveTranslation(t TranslationRow) error {
 	if t.Edited {
 		edited = 1
 	}
-	_, err := s.db.Exec(`INSERT INTO translations (job_id, lang, status, title, description, note, seconds, retries, edited, updated_at, back_title, back_line, added)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := s.db.Exec(`INSERT INTO translations (job_id, lang, status, title, description, note, seconds, retries, edited, updated_at, back_title, back_line, added, added_line)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(job_id, lang) DO UPDATE SET status = excluded.status, title = excluded.title,
 			description = excluded.description, note = excluded.note, seconds = excluded.seconds,
 			retries = excluded.retries, edited = excluded.edited, updated_at = excluded.updated_at,
-			back_title = excluded.back_title, back_line = excluded.back_line, added = excluded.added`,
-		t.JobID, t.Lang, t.Status, t.Title, t.Description, t.Note, t.Seconds, t.Retries, edited, now(), t.BackTitle, t.BackLine, t.Added)
+			back_title = excluded.back_title, back_line = excluded.back_line, added = excluded.added, added_line = excluded.added_line`,
+		t.JobID, t.Lang, t.Status, t.Title, t.Description, t.Note, t.Seconds, t.Retries, edited, now(), t.BackTitle, t.BackLine, t.Added, t.AddedLine)
 	return err
 }
 
@@ -334,7 +336,7 @@ func (s *Store) LoadJob(id string) (JobRow, []TranslationRow, bool, error) {
 	if err != nil {
 		return j, nil, false, err
 	}
-	rows, err := s.db.Query(`SELECT job_id, lang, status, title, description, note, seconds, retries, edited, back_title, back_line, added FROM translations WHERE job_id = ?`, id)
+	rows, err := s.db.Query(`SELECT job_id, lang, status, title, description, note, seconds, retries, edited, back_title, back_line, added, added_line FROM translations WHERE job_id = ?`, id)
 	if err != nil {
 		return j, nil, false, err
 	}
@@ -343,7 +345,7 @@ func (s *Store) LoadJob(id string) (JobRow, []TranslationRow, bool, error) {
 	for rows.Next() {
 		var t TranslationRow
 		var edited int
-		if err := rows.Scan(&t.JobID, &t.Lang, &t.Status, &t.Title, &t.Description, &t.Note, &t.Seconds, &t.Retries, &edited, &t.BackTitle, &t.BackLine, &t.Added); err != nil {
+		if err := rows.Scan(&t.JobID, &t.Lang, &t.Status, &t.Title, &t.Description, &t.Note, &t.Seconds, &t.Retries, &edited, &t.BackTitle, &t.BackLine, &t.Added, &t.AddedLine); err != nil {
 			return j, nil, false, err
 		}
 		t.Edited = edited == 1
