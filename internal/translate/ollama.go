@@ -137,9 +137,11 @@ func sameModel(a, b string) bool {
 // Stats describes one model call, for the log and the measurements.
 type Stats struct {
 	NumCtx       int           `json:"numCtx"`
-	PromptTokens int           `json:"promptTokens"`
-	OutputTokens int           `json:"outputTokens"`
+	PromptTokens int           `json:"promptTokens"` // Ollama's prompt_eval_count
+	OutputTokens int           `json:"outputTokens"` // eval_count
 	Load         time.Duration `json:"load"`
+	PromptEval   time.Duration `json:"promptEval"` // reading the prompt
+	Eval         time.Duration `json:"eval"`       // writing the answer: output tokens per second is OutputTokens / Eval
 	Total        time.Duration `json:"total"`
 }
 
@@ -159,13 +161,15 @@ type chatRequest struct {
 }
 
 type chatResponse struct {
-	Message         chatMessage `json:"message"`
-	Done            bool        `json:"done"`
-	PromptEvalCount int         `json:"prompt_eval_count"`
-	EvalCount       int         `json:"eval_count"`
-	LoadDuration    int64       `json:"load_duration"`
-	TotalDuration   int64       `json:"total_duration"`
-	Error           string      `json:"error"`
+	Message            chatMessage `json:"message"`
+	Done               bool        `json:"done"`
+	PromptEvalCount    int         `json:"prompt_eval_count"`
+	EvalCount          int         `json:"eval_count"`
+	LoadDuration       int64       `json:"load_duration"`
+	PromptEvalDuration int64       `json:"prompt_eval_duration"`
+	EvalDuration       int64       `json:"eval_duration"`
+	TotalDuration      int64       `json:"total_duration"`
+	Error              string      `json:"error"`
 }
 
 // numCtx picks the context size. It stays at 8192 for every normal video,
@@ -237,6 +241,8 @@ func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.R
 		PromptTokens: resp.PromptEvalCount,
 		OutputTokens: resp.EvalCount,
 		Load:         time.Duration(resp.LoadDuration),
+		PromptEval:   time.Duration(resp.PromptEvalDuration),
+		Eval:         time.Duration(resp.EvalDuration),
 		Total:        time.Duration(resp.TotalDuration),
 	}
 	return resp.Message.Content, st, nil
@@ -328,7 +334,7 @@ type BadAnswer struct{ Raw string }
 func (b *BadAnswer) Error() string { return "the model's answer was not in the expected shape" }
 
 // DetectLanguage asks the model which language a text is in (one short call).
-func (o *Ollama) DetectLanguage(ctx context.Context, text string) (string, error) {
+func (o *Ollama) DetectLanguage(ctx context.Context, text string) (string, Stats, error) {
 	if r := []rune(text); len(r) > 500 {
 		text = string(r[:500])
 	}
@@ -336,17 +342,17 @@ func (o *Ollama) DetectLanguage(ctx context.Context, text string) (string, error
 		{Role: "system", Content: detectSystem},
 		{Role: "user", Content: text},
 	}
-	content, _, err := o.chat(ctx, messages, detectSchema, 0)
+	content, st, err := o.chat(ctx, messages, detectSchema, 0)
 	if err != nil {
-		return "", err
+		return "", st, err
 	}
 	var out struct {
 		Code string `json:"code"`
 	}
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
-		return "", &BadAnswer{Raw: content}
+		return "", st, &BadAnswer{Raw: content}
 	}
-	return strings.ToLower(strings.TrimSpace(out.Code)), nil
+	return strings.ToLower(strings.TrimSpace(out.Code)), st, nil
 }
 
 // Unload asks Ollama to drop the model from memory, so the next call is a cold
@@ -355,4 +361,73 @@ func (o *Ollama) Unload(ctx context.Context) error {
 	body, _ := json.Marshal(map[string]any{"model": o.Model, "keep_alive": 0})
 	_, err := o.post(ctx, "/api/generate", body)
 	return err
+}
+
+// ModelInfo is what Ollama reports about the model, for the measurements.
+type ModelInfo struct {
+	Name          string `json:"name"`
+	Parameters    string `json:"parameters,omitempty"`   // "25.2B"
+	Quantization  string `json:"quantization,omitempty"` // "Q4_K_M"
+	DiskBytes     int64  `json:"diskBytes,omitempty"`    // the download, from /api/tags
+	MemoryBytes   int64  `json:"memoryBytes,omitempty"`  // in memory, from /api/ps
+	GPUBytes      int64  `json:"gpuBytes,omitempty"`     // of that on the GPU, from /api/ps
+	ContextLength int    `json:"contextLength,omitempty"`
+	Loaded        bool   `json:"loaded"`
+}
+
+// Info asks Ollama about o.Model: its download from /api/tags, and its size
+// in memory and on the GPU from /api/ps when it is loaded.
+func (o *Ollama) Info(ctx context.Context) (ModelInfo, error) {
+	info := ModelInfo{Name: o.Model}
+	type entry struct {
+		Name          string `json:"name"`
+		Model         string `json:"model"`
+		Size          int64  `json:"size"`
+		SizeVRAM      int64  `json:"size_vram"`
+		ContextLength int    `json:"context_length"`
+		Details       struct {
+			ParameterSize     string `json:"parameter_size"`
+			QuantizationLevel string `json:"quantization_level"`
+		} `json:"details"`
+	}
+	var tags, ps struct {
+		Models []entry `json:"models"`
+	}
+	if err := o.getJSON(ctx, "/api/tags", &tags); err != nil {
+		return info, err
+	}
+	for _, m := range tags.Models {
+		if sameModel(m.Name, o.Model) || sameModel(m.Model, o.Model) {
+			info.DiskBytes = m.Size
+			info.Parameters, info.Quantization = m.Details.ParameterSize, m.Details.QuantizationLevel
+		}
+	}
+	if err := o.getJSON(ctx, "/api/ps", &ps); err != nil {
+		return info, err
+	}
+	for _, m := range ps.Models {
+		if sameModel(m.Name, o.Model) || sameModel(m.Model, o.Model) {
+			info.Loaded = true
+			info.MemoryBytes, info.GPUBytes, info.ContextLength = m.Size, m.SizeVRAM, m.ContextLength
+		}
+	}
+	return info, nil
+}
+
+func (o *Ollama) getJSON(ctx context.Context, path string, v any) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.BaseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := o.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ollama answered %s", resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(v)
 }

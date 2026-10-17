@@ -72,7 +72,7 @@ func (o *Ollama) BackTranslate(ctx context.Context, req BackRequest) (Back, Stat
 // mean the same. A candidate counts as new when the model names none, or
 // names words that are not in the original (it cannot vouch with words the
 // original does not have).
-func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, error) {
+func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, Stats, error) {
 	original := stripPlaceholders(req.Original)
 	payload := map[string]any{
 		"original":        original,
@@ -83,9 +83,9 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, e
 		{Role: "system", Content: newWordsSystem},
 		{Role: "user", Content: marshalPlain(payload)},
 	}
-	content, _, err := o.chat(ctx, messages, newWordsSchema, 0)
+	content, st, err := o.chat(ctx, messages, newWordsSchema, 0)
 	if err != nil {
-		return nil, err
+		return nil, st, err
 	}
 	var out struct {
 		Matches []struct {
@@ -94,7 +94,7 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, e
 		} `json:"matches"`
 	}
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
-		return nil, &BadAnswer{Raw: content}
+		return nil, st, &BadAnswer{Raw: content}
 	}
 	vouched := map[string]bool{}
 	have := wordSet(original)
@@ -109,7 +109,7 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, e
 			added = append(added, w)
 		}
 	}
-	return added, nil
+	return added, st, nil
 }
 
 // inOriginal reports whether every meaningful word the model named is in the

@@ -468,7 +468,7 @@ func (s *Server) startJob(w http.ResponseWriter, r *http.Request) {
 func (s *Server) detectSource(ctx context.Context, text string) string {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	code, err := s.Svc.Model(ctx).DetectLanguage(ctx, text)
+	code, _, err := s.Svc.Model(ctx).DetectLanguage(ctx, text)
 	if err != nil || code == "" {
 		return "en"
 	}

@@ -24,9 +24,9 @@ type Request struct {
 // Model is the local model, or a fake one in tests and mock mode.
 type Model interface {
 	Translate(ctx context.Context, req Request) (Output, Stats, error)
-	DetectLanguage(ctx context.Context, text string) (string, error)
+	DetectLanguage(ctx context.Context, text string) (string, Stats, error)
 	BackTranslate(ctx context.Context, req BackRequest) (Back, Stats, error)
-	NewWords(ctx context.Context, req NewWordsRequest) ([]string, error)
+	NewWords(ctx context.Context, req NewWordsRequest) ([]string, Stats, error)
 }
 
 // Status of one language in a job.
@@ -58,7 +58,8 @@ type Result struct {
 	Note        string        `json:"note,omitempty"` // the plain reason for Check this one
 	Retries     int           `json:"retries"`
 	Duration    time.Duration `json:"duration"`
-	Stats       []Stats       `json:"-"`
+	Stats       []Stats       `json:"-"` // the translate calls
+	Calls       []Call        `json:"-"` // every model call for this language, for measurements
 	Problems    []string      `json:"-"` // every failed check, for measurements
 	Raw         Output        `json:"-"` // the last answer with placeholders, for recording samples
 
@@ -74,6 +75,25 @@ type Result struct {
 	BackFailed   bool          `json:"-"`
 	RawBack      Back          `json:"-"` // with placeholders, for recording samples
 }
+
+// Call is one model call made for a language.
+type Call struct {
+	Kind  CallKind
+	Stats Stats
+}
+
+// CallKind says what a model call was for.
+type CallKind string
+
+const (
+	CallTranslate CallKind = "translate"
+	CallDetect    CallKind = "language check" // the one-word check for Latin-script languages
+	CallBack      CallKind = "read-back"      // the back-translation
+	CallNewWords  CallKind = "word check"     // which read-back words the original lacks
+)
+
+// ReadBack is true for the calls behind the read-back line.
+func (k CallKind) ReadBack() bool { return k == CallBack || k == CallNewWords }
 
 // Event reports progress for one language.
 type Event struct {
@@ -206,6 +226,7 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 		send(Event{Lang: lang, Status: StatusTranslating})
 		out, st, err := e.Model.Translate(ctx, req)
 		res.Stats = append(res.Stats, st)
+		res.Calls = append(res.Calls, Call{CallTranslate, st})
 		e.log().Info("model call", "lang", lang, "attempt", attempt+1, "numCtx", st.NumCtx,
 			"promptTokens", st.PromptTokens, "outputTokens", st.OutputTokens, "seconds", st.Total.Seconds())
 		if err != nil {
@@ -240,7 +261,7 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 		last = out
 		problem := Check(protSrc, out, prot.Spans, lang)
 		if problem == nil && e.DetectLatin {
-			problem = e.detect(ctx, out, lang, src.Language)
+			problem = e.detect(ctx, out, lang, src.Language, &res)
 		}
 		res.Retries = attempt
 		if problem == nil {
@@ -281,6 +302,7 @@ func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Pro
 	bt, st, err := e.Model.BackTranslate(ctx, BackRequest{
 		Lang: r.Lang, SourceLang: src.Language, Title: r.Raw.Title, Line: firstLine(r.Raw.Description),
 	})
+	r.Calls = append(r.Calls, Call{CallBack, st})
 	e.log().Info("back-translation", "lang", r.Lang, "seconds", st.Total.Seconds(), "err", err)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -312,9 +334,10 @@ func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Pro
 	// The candidates are judged against the whole source: a word the
 	// description says is not new to the video. (A title that borrows a whole
 	// part from the description is caught by the title-growth check.)
-	added, err := e.Model.NewWords(ctx, NewWordsRequest{
+	added, st, err := e.Model.NewWords(ctx, NewWordsRequest{
 		SourceLang: src.Language, Original: protSrc.Title + "\n" + protSrc.Description, Returned: bt, Words: candidates,
 	})
+	r.Calls = append(r.Calls, Call{CallNewWords, st})
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -432,8 +455,8 @@ func addedReason(words []string) string {
 }
 
 // detect is the one-word language check for Latin-script targets, where the
-// script alone cannot tell Spanish from English.
-func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string) *Problem {
+// script alone cannot tell Spanish from English. Its call is added to res.
+func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string, res *Result) *Problem {
 	l, ok := langs.Get(lang)
 	if !ok || l.Script != langs.Latin {
 		return nil
@@ -442,7 +465,8 @@ func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string
 	if countLetters(text) < 12 {
 		return nil
 	}
-	code, err := e.Model.DetectLanguage(ctx, text)
+	code, st, err := e.Model.DetectLanguage(ctx, text)
+	res.Calls = append(res.Calls, Call{CallDetect, st})
 	if err != nil || code == "" {
 		return nil // the check is a bonus; never block on it
 	}

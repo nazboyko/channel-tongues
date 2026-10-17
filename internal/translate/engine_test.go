@@ -67,23 +67,23 @@ func (s *scripted) BackTranslate(ctx context.Context, req BackRequest) (Back, St
 }
 
 // NewWords confirms the candidates listed in confirm (all of them when nil).
-func (s *scripted) NewWords(ctx context.Context, req NewWordsRequest) ([]string, error) {
+func (s *scripted) NewWords(ctx context.Context, req NewWordsRequest) ([]string, Stats, error) {
 	if s.newWordsErr != nil {
-		return nil, s.newWordsErr
+		return nil, Stats{}, s.newWordsErr
 	}
 	if s.confirm == nil {
-		return req.Words, nil
+		return req.Words, Stats{PromptTokens: 300, OutputTokens: 20}, nil
 	}
-	return keepListed(s.confirm, req.Words), nil
+	return keepListed(s.confirm, req.Words), Stats{PromptTokens: 300, OutputTokens: 20}, nil
 }
 
-func (s *scripted) DetectLanguage(ctx context.Context, text string) (string, error) {
+func (s *scripted) DetectLanguage(ctx context.Context, text string) (string, Stats, error) {
 	for prefix, code := range s.detect {
 		if strings.HasPrefix(text, prefix) {
-			return code, nil
+			return code, Stats{PromptTokens: 90, OutputTokens: 8}, nil
 		}
 	}
-	return "", nil
+	return "", Stats{PromptTokens: 90, OutputTokens: 8}, nil
 }
 
 func answer(title, desc string) func(Request) (Output, error) {
@@ -290,5 +290,32 @@ func TestSameFamily(t *testing.T) {
 		if sameFamily(pair[0], pair[1]) {
 			t.Errorf("%s answering for %s should still be held back", pair[0], pair[1])
 		}
+	}
+}
+
+// Every model call for a language is kept with what it was for, so the
+// measurements can show the read-back apart from the translation.
+func TestEngineRecordsEveryCall(t *testing.T) {
+	m := &scripted{
+		answers: map[string][]func(Request) (Output, error){
+			"es": {
+				answer("Lluvia en la ventana de una cabaña · 3 horas ⟦1⟧", "Lluvia suave toda la noche.\n\n⟦2⟧ Empieza la lluvia\nMás en el canal"),
+				answer("Lluvia en la ventana de una cabaña · 3 horas ⟦1⟧", "Lluvia suave toda la noche.\n\n⟦2⟧ Empieza la lluvia\nMás en ⟦3⟧"),
+			},
+		},
+		detect: map[string]string{"Lluvia": "es"},
+		backs:  map[string]Back{"es": {Title: "Rain on a mountain cabin window · 3 hours ⟦1⟧", Line: "Soft rain all night."}},
+	}
+	res := (&Engine{Model: m, DetectLatin: true, BackTranslate: true}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
+	var kinds []string
+	for _, c := range res[0].Calls {
+		kinds = append(kinds, string(c.Kind))
+	}
+	want := "translate,translate,language check,read-back,word check"
+	if strings.Join(kinds, ",") != want {
+		t.Fatalf("calls %v, want %s", kinds, want)
+	}
+	if !res[0].Calls[4].Kind.ReadBack() || res[0].Calls[2].Kind.ReadBack() || res[0].Calls[4].Stats.PromptTokens != 300 {
+		t.Fatalf("got %+v", res[0].Calls)
 	}
 }

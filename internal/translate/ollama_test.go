@@ -106,3 +106,36 @@ func TestAnswerCapOnARetryCoversTheEarlierAnswer(t *testing.T) {
 		t.Fatalf("the retry has to write the whole answer again; cap %d", got)
 	}
 }
+
+func TestInfoReadsTagsAndPs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			w.Write([]byte(`{"models":[{"name":"gemma4:26b","model":"gemma4:26b","size":18730000000,"details":{"parameter_size":"25.2B","quantization_level":"Q4_K_M"}},{"name":"gemma4:e4b","size":6580000000}]}`))
+		case "/api/ps":
+			w.Write([]byte(`{"models":[{"name":"gemma4:26b","model":"gemma4:26b","size":1235998472,"size_vram":1235998472,"context_length":8192}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	info, err := NewOllama(srv.URL, "gemma4:26b").Info(context.Background())
+	if err != nil || !info.Loaded || info.DiskBytes != 18730000000 || info.MemoryBytes != 1235998472 || info.GPUBytes != info.MemoryBytes || info.Parameters != "25.2B" || info.ContextLength != 8192 {
+		t.Fatalf("got %+v %v", info, err)
+	}
+	cold, _ := NewOllama(srv.URL, "gemma4:e4b").Info(context.Background())
+	if cold.Loaded || cold.DiskBytes != 6580000000 {
+		t.Fatalf("not loaded: %+v", cold)
+	}
+}
+
+func TestChatKeepsTheTimings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"message":{"role":"assistant","content":"{\"code\":\"es\"}"},"done":true,"prompt_eval_count":120,"eval_count":6,"load_duration":4000000000,"prompt_eval_duration":90000000,"eval_duration":60000000,"total_duration":4200000000}`))
+	}))
+	defer srv.Close()
+	code, st, err := NewOllama(srv.URL, "gemma4:26b").DetectLanguage(context.Background(), "Lluvia")
+	if err != nil || code != "es" || st.PromptTokens != 120 || st.OutputTokens != 6 || st.Load.Seconds() != 4 || st.Eval.Milliseconds() != 60 || st.PromptEval.Milliseconds() != 90 {
+		t.Fatalf("got %q %+v %v", code, st, err)
+	}
+}

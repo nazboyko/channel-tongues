@@ -87,25 +87,25 @@ func (f *FakeModel) BackTranslate(ctx context.Context, req BackRequest) (Back, S
 }
 
 // NewWords returns the words recorded as added for that answer.
-func (f *FakeModel) NewWords(ctx context.Context, req NewWordsRequest) ([]string, error) {
+func (f *FakeModel) NewWords(ctx context.Context, req NewWordsRequest) ([]string, Stats, error) {
 	f.load()
 	for _, byLang := range f.samples {
 		for _, s := range byLang {
 			if s.Back != nil && *s.Back == req.Returned {
-				return keepListed(s.New, req.Words), nil
+				return keepListed(s.New, req.Words), Stats{NumCtx: 8192}, nil
 			}
 		}
 	}
-	return nil, nil
+	return nil, Stats{NumCtx: 8192}, nil
 }
 
 // DetectLanguage reports the bracketed code of a fallback answer, otherwise
 // nothing (which never blocks).
-func (f *FakeModel) DetectLanguage(ctx context.Context, text string) (string, error) {
+func (f *FakeModel) DetectLanguage(ctx context.Context, text string) (string, Stats, error) {
 	if strings.HasPrefix(text, "[") {
 		if i := strings.Index(text, "]"); i > 1 {
-			return "en", nil
+			return "en", Stats{NumCtx: 8192}, nil
 		}
 	}
-	return "", nil
+	return "", Stats{NumCtx: 8192}, nil
 }

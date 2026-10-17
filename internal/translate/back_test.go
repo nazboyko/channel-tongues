@@ -145,9 +145,9 @@ type recordingNewWords struct {
 	reqs []NewWordsRequest
 }
 
-func (r *recordingNewWords) NewWords(ctx context.Context, req NewWordsRequest) ([]string, error) {
+func (r *recordingNewWords) NewWords(ctx context.Context, req NewWordsRequest) ([]string, Stats, error) {
 	r.reqs = append(r.reqs, req)
-	return req.Words, nil
+	return req.Words, Stats{}, nil
 }
 
 func TestCandidatesAreJudgedAgainstTheWholeSource(t *testing.T) {
