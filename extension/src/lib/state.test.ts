@@ -50,8 +50,11 @@ describe("screenFor", () => {
     expect(screenFor({ ...base, videoId: "v", job: { stage: "published", fromVideo: true } })).toBe("published");
     expect(screenFor({ ...base, pasteMode: true, job: { stage: "done", fromVideo: false } })).toBe("copy");
   });
-  it("puts the model problem before a job", () => {
+  it("keeps finished work on screen when Ollama is closed afterwards", () => {
     const down = { kind: "ok" as const, health: health({ model: { state: "down", model: "x" } }) };
-    expect(screenFor({ ...base, health: down, job: { stage: "done", fromVideo: true } })).toBe("model");
+    expect(screenFor({ ...base, health: down, job: { stage: "done", fromVideo: true } })).toBe("review");
+    expect(screenFor({ ...base, health: down, job: { stage: "published", fromVideo: true } })).toBe("published");
+    expect(screenFor({ ...base, health: down, job: { stage: "done", fromVideo: false } })).toBe("copy");
+    expect(screenFor({ ...base, health: down, job: { stage: "running", fromVideo: true } })).toBe("model");
   });
 });

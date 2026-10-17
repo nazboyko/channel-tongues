@@ -50,18 +50,27 @@ function messageOf(e: unknown): string {
   return "Something went wrong. Try again.";
 }
 
-/** Opens a page: in the Studio tab when there is one, else in a new tab. */
-async function openPage(url: string) {
+/** Opens a page in a new tab next to Studio. */
+async function openTab(url: string) {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (tab?.id !== undefined && isStudio(tab.url)) {
-      await chrome.tabs.update(tab.id, { url });
-      return;
-    }
     await chrome.tabs.create({ url });
   } catch {
     window.open(url, "_blank");
   }
+}
+
+/** Shows a Studio page: in the Studio tab when it is the active one, else in a new tab. */
+async function openInStudio(url: string) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id !== undefined && isStudio(tab.url)) {
+      await chrome.tabs.update(tab.id, { url });
+      return;
+    }
+  } catch {
+    // fall through to a new tab
+  }
+  openTab(url);
 }
 
 type Stage = "running" | "done" | "published";
@@ -84,6 +93,8 @@ export function App() {
   const [jobVideo, setJobVideo] = useState<Video | null>(null);
   const [replace, setReplace] = useState<string[]>([]);
   const [published, setPublished] = useState<PublishResult | null>(null);
+  const currentJob = useRef<string | null>(null);
+  const stream = useRef<AbortController | null>(null);
 
   const videoId = pickedVideo ?? tabVideo;
   const h = health.kind === "ok" ? health.health : null;
@@ -98,29 +109,35 @@ export function App() {
     }
   }, []);
 
-  // Health: quickly while something is missing, slowly once all is well.
+  // Health: quickly while waiting for something to be fixed, slowly otherwise.
+  // While unpaired it waits for the code instead of asking with a wrong one.
+  const waiting = health.kind === "down" || health.kind === "pending" || (h !== null && (h.model.state !== "ready" || (!h.signedIn && !pasteMode)));
   useEffect(() => {
-    refresh();
-    const fast = health.kind !== "ok" || health.health.model.state !== "ready" || !health.health.signedIn;
-    const t = setInterval(refresh, fast ? 3000 : 20000);
+    if (health.kind === "unpaired") return;
+    if (health.kind === "pending") refresh();
+    const t = setInterval(refresh, waiting ? 3000 : 20000);
     return () => clearInterval(t);
-  }, [refresh, health.kind, h?.model.state, h?.signedIn]);
+  }, [refresh, health.kind, waiting]);
 
-  // Follow the active tab, unless ?video= is given.
+  // Follow the active tab of this window, unless ?video= is given.
   useEffect(() => {
     if (overrideVideo) return;
+    let windowId: number | undefined;
     const read = async () => {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        windowId = tab?.windowId;
         setTabVideo(isStudio(tab?.url) ? videoIdFromUrl(tab?.url) : null);
       } catch {
         setTabVideo(null);
       }
     };
     read();
-    const onActivated = () => read();
-    const onUpdated = (_id: number, info: chrome.tabs.OnUpdatedInfo) => {
-      if (info.url) read();
+    const onActivated = (info: chrome.tabs.OnActivatedInfo) => {
+      if (windowId === undefined || info.windowId === windowId) read();
+    };
+    const onUpdated = (_id: number, info: chrome.tabs.OnUpdatedInfo, tab: chrome.tabs.Tab) => {
+      if (info.url && tab.active && (windowId === undefined || tab.windowId === windowId)) read();
     };
     chrome.tabs.onActivated.addListener(onActivated);
     chrome.tabs.onUpdated.addListener(onUpdated);
@@ -130,22 +147,27 @@ export function App() {
     };
   }, []);
 
-  // A new video in the tab ends a finished job.
-  const lastTabVideo = useRef(tabVideo);
-  useEffect(() => {
-    if (lastTabVideo.current === tabVideo) return;
-    lastTabVideo.current = tabVideo;
-    setPickedVideo(null);
-    if (stage !== "running") {
-      setJob(null);
-      setStage(null);
-    }
-  }, [tabVideo, stage]);
+  const clearJob = useCallback(() => {
+    stream.current?.abort();
+    stream.current = null;
+    currentJob.current = null;
+    setJob(null);
+    setStage(null);
+    setPublished(null);
+  }, []);
 
-  const healthOK = health.kind === "ok";
+  // Opening another video in Studio ends a finished job for a different
+  // video. Other tabs (or pasted text) leave the work on screen.
   useEffect(() => {
-    if (healthOK && languages.length === 0) api.languages("").then(setLanguages, () => undefined);
-  }, [healthOK, languages.length]);
+    if (!tabVideo) return;
+    setPickedVideo(null);
+    if (stage && stage !== "running" && job?.videoId && job.videoId !== tabVideo) clearJob();
+  }, [tabVideo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The language list; asked for again on every health answer until it arrives.
+  useEffect(() => {
+    if (h && languages.length === 0) api.languages("").then(setLanguages, () => undefined);
+  }, [h, languages.length]);
 
   const screen = screenFor({
     health,
@@ -154,34 +176,57 @@ export function App() {
     job: stage ? { stage, fromVideo: Boolean(job?.videoId) } : null,
   });
 
-  const startJob = async (req: { videoId?: string; title?: string; description?: string; languages: string[] }, video: Video | null, replaceCodes: string[]) => {
-    const id = await api.startJob(req);
-    setJobVideo(video);
-    setReplace(replaceCodes);
-    setStage("running");
-    const first = await api.job(id);
-    setJob(first);
+  // Follows one job until it ends. Events from an older job are ignored. If
+  // the stream breaks or ends early, it asks for the job every two seconds.
+  const follow = (id: string) => {
+    const ctrl = new AbortController();
+    stream.current = ctrl;
+    const mine = () => currentJob.current === id && !ctrl.signal.aborted;
+    const settle = (j: Job) => {
+      if (!mine()) return;
+      setJob(j);
+      if (j.state === "done") setStage("done");
+      if (j.state === "cancelled") clearJob();
+    };
+    const poll = async () => {
+      while (mine()) {
+        const j = await api.job(id).catch(() => null);
+        if (!mine()) return;
+        if (j) {
+          settle(j);
+          if (j.state !== "running") return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    };
     api
       .watch(
         id,
-        (j) => {
-          setJob(j);
-          if (j.state === "done") setStage("done");
-          if (j.state === "cancelled") {
-            setStage(null);
-            setJob(null);
-          }
+        settle,
+        (l) => {
+          if (mine()) setJob((cur) => (cur && cur.id === id ? { ...cur, languages: cur.languages.map((x) => (x.code === l.code ? { ...x, ...l } : x)) } : cur));
         },
-        (l) => setJob((cur) => (cur ? { ...cur, languages: cur.languages.map((x) => (x.code === l.code ? { ...x, ...l } : x)) } : cur)),
+        ctrl.signal,
       )
-      .catch(async () => {
-        // The stream broke; fall back to asking for the final state.
-        const j = await api.job(id).catch(() => null);
-        if (j) {
-          setJob(j);
-          setStage(j.state === "running" ? "running" : "done");
-        }
-      });
+      .then(poll, poll);
+  };
+
+  const startJob = async (req: { videoId?: string; title?: string; description?: string; languages: string[] }, video: Video | null, replaceCodes: string[]) => {
+    const id = await api.startJob(req);
+    stream.current?.abort();
+    currentJob.current = id;
+    setJobVideo(video);
+    setReplace(replaceCodes);
+    setPublished(null);
+    setStage("running");
+    const first = await api.job(id).catch(() => null);
+    if (first && currentJob.current === id) setJob(first);
+    follow(id);
+  };
+
+  const signIn = async () => {
+    const url = await api.authUrl();
+    if (url !== "about:blank") openTab(url);
   };
 
   const settings =
@@ -196,10 +241,7 @@ export function App() {
           await api.signOut(c.id).catch(() => undefined);
           await refresh();
         }}
-        onAddChannel={async () => {
-          const url = await api.authUrl().catch(() => null);
-          if (url) openPage(url);
-        }}
+        onAddChannel={() => signIn().catch(() => undefined)}
       />
     ) : null;
   const footer = (
@@ -219,9 +261,9 @@ export function App() {
     case "model":
       return <ModelScreen health={h!} onRetry={refresh} footer={footer} />;
     case "signin":
-      return <SignInScreen health={h!} onPaste={() => setPasteMode(true)} footer={footer} />;
+      return <SignInScreen health={h!} onSignIn={signIn} onPaste={() => setPasteMode(true)} footer={footer} />;
     case "home":
-      return <HomeScreen onPick={setPickedVideo} footer={footer} />;
+      return <HomeScreen onPick={setPickedVideo} onSignIn={signIn} footer={footer} />;
     case "paste":
       return (
         <PasteScreen
@@ -239,6 +281,7 @@ export function App() {
           health={h!}
           picked={pickedVideo !== null}
           onBack={() => setPickedVideo(null)}
+          onSignIn={signIn}
           onTranslate={(video, codes) =>
             startJob(
               { videoId: video.id, languages: codes },
@@ -255,8 +298,7 @@ export function App() {
           job={job}
           onCancel={() => {
             if (job) api.cancel(job.id).catch(() => undefined);
-            setStage(null);
-            setJob(null);
+            clearJob();
           }}
           footer={<StatusLine health={h} />}
         />
@@ -264,6 +306,7 @@ export function App() {
     case "review":
       return (
         <ReviewScreen
+          key={job!.id}
           job={job!}
           video={jobVideo}
           replace={replace}
@@ -272,20 +315,21 @@ export function App() {
             setPublished(res);
             setStage("published");
           }}
+          onStartOver={clearJob}
           footer={footer}
         />
       );
     case "published":
-      return <PublishedScreen job={job!} result={published!} footer={footer} />;
+      return <PublishedScreen key={job!.id} job={job!} result={published!} onStartOver={clearJob} footer={footer} />;
     case "copy":
       return (
         <CopyScreen
+          key={job!.id}
           job={job!}
           health={h!}
           onSignIn={() => {
             setPasteMode(false);
-            setJob(null);
-            setStage(null);
+            clearJob();
           }}
           footer={footer}
         />
@@ -378,15 +422,14 @@ function ModelScreen(props: { health: Health; onRetry: () => void; footer: React
 }
 
 /* 4 */
-function SignInScreen(props: { health: Health; onPaste: () => void; footer: ReactNode }) {
+function SignInScreen(props: { health: Health; onSignIn: () => Promise<void>; onPaste: () => void; footer: ReactNode }) {
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
   const signIn = async () => {
     setError("");
     try {
-      const url = await api.authUrl();
+      await props.onSignIn();
       setWaiting(true);
-      if (url !== "about:blank") openPage(url);
     } catch (e) {
       setError(messageOf(e));
     }
@@ -422,14 +465,16 @@ function SignInScreen(props: { health: Health; onPaste: () => void; footer: Reac
 }
 
 /* 5 */
-function HomeScreen(props: { onPick: (id: string) => void; footer: ReactNode }) {
+function HomeScreen(props: { onPick: (id: string) => void; onSignIn: () => Promise<void>; footer: ReactNode }) {
   const [uploads, setUploads] = useState<Upload[] | null>(null);
   const [error, setError] = useState("");
+  const [expired, setExpired] = useState(false);
   const [link, setLink] = useState("");
   useEffect(() => {
     api.uploads(6).then(setUploads, (e) => {
       setUploads([]);
       setError(messageOf(e));
+      setExpired(e instanceof ApiError && e.code === "signin");
     });
   }, []);
   const tryLink = (value: string) => {
@@ -485,6 +530,11 @@ function HomeScreen(props: { onPick: (id: string) => void; footer: ReactNode }) 
           {error}
         </div>
       )}
+      {expired && (
+        <button className="primary push" onClick={() => props.onSignIn().catch((e) => setError(messageOf(e)))}>
+          Sign in again
+        </button>
+      )}
     </Shell>
   );
 }
@@ -509,6 +559,7 @@ function PasteScreen(props: {
   const [extra, setExtra] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const chosen = selected ?? new Set(popular);
   const codes = [...popular, ...extra];
   const toggle = (c: string) => {
@@ -551,16 +602,21 @@ function PasteScreen(props: {
       )}
       <button
         className="primary push"
-        disabled={!title.trim() || count === 0}
-        onClick={() =>
+        disabled={!title.trim() || count === 0 || busy}
+        onClick={() => {
+          setBusy(true);
+          setError("");
           props
             .onTranslate(
               title,
               description,
               codes.filter((c) => chosen.has(c)),
             )
-            .catch((e) => setError(messageOf(e)))
-        }
+            .catch((e) => {
+              setError(messageOf(e));
+              setBusy(false);
+            });
+        }}
       >
         {count === 0 ? "Pick a language" : `Translate ${plural(count, "language")}`}
       </button>
@@ -575,6 +631,7 @@ function VideoScreen(props: {
   health: Health;
   picked: boolean;
   onBack: () => void;
+  onSignIn: () => Promise<void>;
   onTranslate: (video: Video, codes: string[]) => Promise<void>;
   footer: ReactNode;
 }) {
@@ -610,9 +667,15 @@ function VideoScreen(props: {
         <Heading>{error.code === "notfound" ? "This video is not on your channels" : "This video could not be opened"}</Heading>
         <p>{error.message}</p>
         {back}
-        <button className="primary push" onClick={load}>
-          Try again
-        </button>
+        {error.code === "signin" ? (
+          <button className="primary push" onClick={() => props.onSignIn().catch(() => undefined)}>
+            Sign in again
+          </button>
+        ) : (
+          <button className="primary push" onClick={load}>
+            Try again
+          </button>
+        )}
       </Shell>
     );
   }
@@ -749,7 +812,7 @@ function TranslatingScreen(props: { job: Job | null; onCancel: () => void; foote
       <p>{finished === 0 ? "Warming up the model. The first run takes a few seconds longer." : "Each language is checked before you see it."}</p>
       <ul className="rows" aria-live="polite" aria-label="Progress">
         {langs.map((l) => (
-          <li className="row" key={l.code}>
+          <li className="row" key={l.code} aria-atomic="true">
             <span lang={l.code}>{l.name}</span>
             <StatusText lang={l} />
           </li>
@@ -786,6 +849,7 @@ function ReviewScreen(props: {
   replace: string[];
   videosLeft: number;
   onPublished: (r: PublishResult) => void;
+  onStartOver: () => void;
   footer: ReactNode;
 }) {
   const usable = props.job.languages.filter((l) => l.status === "ready" || l.status === "check");
@@ -799,17 +863,19 @@ function ReviewScreen(props: {
   const [error, setError] = useState("");
 
   const save = async (code: string) => {
-    const d = drafts[code];
+    const l = props.job.languages.find((x) => x.code === code)!;
+    const d = draftOf(l);
     try {
       await api.edit(props.job.id, code, d.title, d.description);
-      setDrafts((cur) => ({ ...cur, [code]: { ...cur[code], error: undefined } }));
+      setDrafts((cur) => ({ ...cur, [code]: { ...d, error: undefined } }));
       return true;
     } catch (e) {
-      setDrafts((cur) => ({ ...cur, [code]: { ...cur[code], error: messageOf(e) } }));
+      setDrafts((cur) => ({ ...cur, [code]: { ...d, error: messageOf(e) } }));
       return false;
     }
   };
-  const dirty = (l: JobLang) => drafts[l.code].title !== l.title || drafts[l.code].description !== l.description;
+  const draftOf = (l: JobLang): Draft => drafts[l.code] ?? { title: l.title, description: l.description };
+  const dirty = (l: JobLang) => draftOf(l).title !== l.title || draftOf(l).description !== l.description;
 
   const publish = async () => {
     setBusy(true);
@@ -839,12 +905,20 @@ function ReviewScreen(props: {
   const toCheck = usable.filter((l) => l.status === "check").length;
   return (
     <Shell footer={props.footer}>
+      {props.video && (
+        <div className="video">
+          <div className="t">{props.video.title}</div>
+          <div className="s">{props.video.channelTitle}</div>
+        </div>
+      )}
       <Heading>Look it over</Heading>
       <p>
-        {props.job.ready} ready{toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.
+        {usable.length === 0
+          ? "Nothing could be translated this time."
+          : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
       </p>
       {usable.map((l) => {
-        const d = drafts[l.code];
+        const d = draftOf(l);
         const titleId = `t-${l.code}`;
         const counterId = `c-${l.code}`;
         return (
@@ -913,7 +987,14 @@ function ReviewScreen(props: {
           </section>
         );
       })}
-      {failed.length > 0 && <p>Could not translate: {failed.map((l) => l.name).join(", ")}. Translate again to retry them.</p>}
+      {failed.length > 0 && (
+        <>
+          <p>Could not translate: {failed.map((l) => l.name).join(", ")}.</p>
+          <button className="link" onClick={props.onStartOver}>
+            Translate again
+          </button>
+        </>
+      )}
       <div className="footer">
         {error && (
           <div className="error" role="alert">
@@ -929,7 +1010,7 @@ function ReviewScreen(props: {
 }
 
 /* 9 */
-function PublishedScreen(props: { job: Job; result: PublishResult; footer: ReactNode }) {
+function PublishedScreen(props: { job: Job; result: PublishResult; onStartOver: () => void; footer: ReactNode }) {
   const [undone, setUndone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -945,8 +1026,9 @@ function PublishedScreen(props: { job: Job; result: PublishResult; footer: React
         return <span className="st ok">✓ Already there</span>;
       default:
         return (
-          <span className="st ok" aria-label="Published">
-            ✓
+          <span className="st ok">
+            <span aria-hidden="true">✓</span>
+            <span className="sr-only">Published</span>
           </span>
         );
     }
@@ -954,9 +1036,12 @@ function PublishedScreen(props: { job: Job; result: PublishResult; footer: React
   if (undone) {
     return (
       <Shell footer={props.footer}>
-        <Heading>Undone</Heading>
+        <Heading key="undone">Undone</Heading>
         <p>The video's translations are back to how they were.</p>
-        <button className="primary push" onClick={() => openPage(props.result.studioUrl)}>
+        <button className="link" onClick={props.onStartOver}>
+          Translate again
+        </button>
+        <button className="primary push" onClick={() => openInStudio(props.result.studioUrl)}>
           Open in Studio
         </button>
       </Shell>
@@ -986,7 +1071,7 @@ function PublishedScreen(props: { job: Job; result: PublishResult; footer: React
         </div>
       )}
       <div className="push">
-        <button className="primary" onClick={() => openPage(props.result.studioUrl)}>
+        <button className="primary" onClick={() => openInStudio(props.result.studioUrl)}>
           Open in Studio
         </button>
         {props.result.backupId && (

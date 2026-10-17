@@ -42,12 +42,13 @@ export function screenFor(s: PanelState): Screen {
       return "pair";
   }
   const h = s.health.health;
-  if (h.model.state !== "ready") return "model";
-  if (s.job) {
-    if (s.job.stage === "running") return "translating";
+  // Finished work stays on screen even if Ollama is closed afterwards.
+  if (s.job && s.job.stage !== "running") {
     if (s.job.stage === "published") return "published";
     return s.job.fromVideo ? "review" : "copy";
   }
+  if (h.model.state !== "ready") return "model";
+  if (s.job) return "translating";
   if (s.pasteMode) return "paste";
   if (!h.signedIn) return "signin";
   return s.videoId ? "video" : "home";

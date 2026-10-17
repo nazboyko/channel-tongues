@@ -4,19 +4,19 @@ import type { Channel, Health, Language } from "./lib/api";
 export function Mark() {
   // Our own mark: a speech bubble drawn as twelve ticks (the icon without its tile).
   return (
-    <svg className="mark" viewBox="12 10 102 102" aria-hidden="true">
+    <svg className="mark" viewBox="18 12 98 98" aria-hidden="true">
       <circle
-        cx="68"
+        cx="66"
         cy="56"
-        r="38"
+        r="36"
         fill="none"
         stroke="var(--accent)"
-        strokeWidth="10"
+        strokeWidth="11"
         strokeLinecap="round"
-        strokeDasharray="7.96 11.94"
-        transform="rotate(-96 68 56)"
+        strokeDasharray="7.92 10.93"
+        transform="rotate(-96.30 66 56)"
       />
-      <path d="M46 83.2 L17.1 106.9 L40.8 78 Z" fill="var(--accent)" stroke="var(--accent)" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M51.2 91.0 Q44.8 98.4 32.4 105.7 Q32.4 87.8 32.4 73.8 Z" fill="var(--accent)" stroke="var(--accent)" strokeWidth="5" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -100,15 +100,9 @@ export function LanguageChips(props: { langs: ChipLang[]; selected: Set<string>;
       {props.langs.map((l) => {
         const on = props.selected.has(l.code);
         return (
-          <button
-            key={l.code}
-            className={`chip${l.has && !on ? " has" : ""}`}
-            aria-pressed={on}
-            aria-label={`${l.english}${l.has ? ", the video has it already" : ""}`}
-            lang={l.code}
-            onClick={() => props.onToggle(l.code)}
-          >
-            {l.native}
+          <button key={l.code} className={`chip${l.has && !on ? " has" : ""}`} aria-pressed={on} onClick={() => props.onToggle(l.code)}>
+            <span lang={l.code}>{l.native}</span>
+            {l.native !== l.english && <span className="sr-only"> ({l.english})</span>}
             {l.has && !on && <span className="tag">has it</span>}
           </button>
         );
@@ -132,15 +126,20 @@ export function MoreLanguages(props: { all: Language[]; shown: Set<string>; onAd
       .slice(0, 50);
   }, [props.all, props.shown, query]);
 
+  const wasOpen = useRef(false);
   useEffect(() => {
     if (open) inputRef.current?.focus();
+    else if (wasOpen.current) buttonRef.current?.focus(); // back to "More languages" after Escape or Done
+    wasOpen.current = open;
   }, [open]);
   useEffect(() => setActive(0), [query]);
+  useEffect(() => {
+    if (open && matches[active]) document.getElementById(`lang-${matches[active].code}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, matches]);
 
   const close = () => {
     setOpen(false);
     setQuery("");
-    buttonRef.current?.focus();
   };
   const pick = (code: string) => {
     props.onAdd(code);
@@ -161,6 +160,7 @@ export function MoreLanguages(props: { all: Language[]; shown: Set<string>; onAd
         ref={inputRef}
         className="field"
         role="combobox"
+        aria-autocomplete="list"
         aria-expanded="true"
         aria-controls="more-langs"
         aria-activedescendant={matches[active] ? `lang-${matches[active].code}` : undefined}
@@ -218,7 +218,7 @@ export function StatusLine(props: { health: Health | null }) {
   if (!h) return null;
   const model = h.model.model.startsWith("gemma4") ? "Gemma 4" : h.model.model;
   return (
-    <div className="status" aria-label="Status">
+    <div className="status" role="status">
       <span>
         <span className="dot" />
         Helper on
@@ -243,16 +243,26 @@ export function Settings(props: {
 }) {
   const { health } = props;
   const [adding, setAdding] = useState("");
+  const [error, setError] = useState("");
   const words = health.keepWords;
   const channels = health.channels;
   const summary =
     channels.length > 0
       ? `Keep these words · ${channels.length === 1 ? "1 channel" : `${channels.length} channels`}`
       : "Keep these words";
+  const change = (next: string[]) =>
+    props.onKeepWords(next).then(
+      () => setError(""),
+      () => setError("That did not save. Is the helper still running?"),
+    );
   const add = () => {
     const w = adding.trim();
     if (!w) return;
-    props.onKeepWords([...words, w]).then(() => setAdding(""));
+    if (words.some((x) => x.toLowerCase() === w.toLowerCase())) {
+      setAdding("");
+      return;
+    }
+    change([...words, w]).then(() => setAdding(""));
   };
   return (
     <details className="settings">
@@ -268,7 +278,7 @@ export function Settings(props: {
               key={w}
               className="chip"
               aria-label={`Stop keeping ${w}`}
-              onClick={() => props.onKeepWords(words.filter((x) => x !== w))}
+              onClick={() => change(words.filter((x) => x !== w))}
             >
               {w} <span className="x" aria-hidden="true">×</span>
             </button>
@@ -289,6 +299,11 @@ export function Settings(props: {
             Add
           </button>
         </div>
+        {error && (
+          <div className="error" role="alert">
+            {error}
+          </div>
+        )}
         {channels.length > 0 && (
           <>
             <h2>Channels</h2>
