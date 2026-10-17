@@ -186,15 +186,16 @@ func numCtx(messages []chatMessage) int {
 	return 8192
 }
 
-// numPredict caps the answer at twice the text it answers (in characters)
-// plus room for the JSON around it. A real answer stays far below; a model
-// that loses its way in a language it barely knows otherwise writes until
-// the context is full, which took minutes per language.
+// numPredict caps the answer at twice the longest text in the conversation
+// (in characters) plus room for the JSON around it. On a retry that is the
+// earlier answer, which the model writes again in full. A real answer stays
+// far below; a model that loses its way in a language it barely knows
+// otherwise writes until the context is full, which took minutes per language.
 func numPredict(messages []chatMessage) int {
 	runes := 0
 	for _, m := range messages {
-		if m.Role == "user" {
-			runes = len([]rune(m.Content))
+		if m.Role == "user" || m.Role == "assistant" {
+			runes = max(runes, len([]rune(m.Content)))
 		}
 	}
 	return 2*runes + 256

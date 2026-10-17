@@ -93,3 +93,16 @@ func TestChatCapsTheAnswerLength(t *testing.T) {
 		t.Fatalf("options %v", got)
 	}
 }
+
+func TestAnswerCapOnARetryCoversTheEarlierAnswer(t *testing.T) {
+	answer := strings.Repeat("ฝน", 1000) // the earlier answer, 2,000 characters
+	got := numPredict([]chatMessage{
+		{Role: "system", Content: "instructions"},
+		{Role: "user", Content: "short source"},
+		{Role: "assistant", Content: answer},
+		{Role: "user", Content: "Line 3 went missing. Translate it."},
+	})
+	if got != 2*2000+256 {
+		t.Fatalf("the retry has to write the whole answer again; cap %d", got)
+	}
+}
