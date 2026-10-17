@@ -68,6 +68,11 @@ export interface JobLang {
   description: string;
   note?: string;
   edited: boolean;
+  /** The translation read back into the video's language, title and first line. */
+  backTitle?: string;
+  backLine?: string;
+  /** Words in the read-back that the source does not have. */
+  added?: string[];
 }
 
 export interface Job {

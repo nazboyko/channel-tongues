@@ -20,6 +20,7 @@ import {
   CopyButton,
   CopyCode,
   Heading,
+  ReadsAs,
   LanguageChips,
   MoreLanguages,
   Settings,
@@ -338,6 +339,7 @@ export function App() {
         <ReviewScreen
           key={job!.id}
           job={job!}
+          sourceName={sourceName(job!, languages)}
           video={jobVideo}
           replace={replace}
           videosLeft={h?.videosLeftToday ?? 999}
@@ -356,6 +358,7 @@ export function App() {
         <CopyScreen
           key={job!.id}
           job={job!}
+          sourceName={sourceName(job!, languages)}
           health={h!}
           onSignIn={() => {
             setPasteMode(false);
@@ -365,6 +368,12 @@ export function App() {
         />
       );
   }
+}
+
+/** The English name of the job's source language ("English" when unknown). */
+function sourceName(job: Job, languages: Language[]): string {
+  const code = job.sourceLanguage || "en";
+  return languages.find((l) => l.code === code || code.startsWith(l.code + "-"))?.english ?? (code.startsWith("en") ? "English" : code);
 }
 
 /* 1 */
@@ -903,6 +912,7 @@ function TitleCounter(props: { id: string; title: string }) {
 /* 8 */
 function ReviewScreen(props: {
   job: Job;
+  sourceName: string;
   video: Video | null;
   replace: string[];
   videosLeft: number;
@@ -1009,6 +1019,7 @@ function ReviewScreen(props: {
               onBlur={() => dirty(l) && save(l.code)}
             />
             <TitleCounter id={counterId} title={d.title} />
+            <ReadsAs sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} stale={l.edited || d.title !== l.title} />
             <textarea
               className="field"
               lang={l.code}
@@ -1157,7 +1168,7 @@ function PublishedScreen(props: { job: Job; result: PublishResult; onStartOver: 
 }
 
 /* 9b */
-function CopyScreen(props: { job: Job; health: Health; onSignIn: () => void; footer: ReactNode }) {
+function CopyScreen(props: { job: Job; sourceName: string; health: Health; onSignIn: () => void; footer: ReactNode }) {
   const usable = props.job.languages.filter((l) => l.title);
   const [folder, setFolder] = useState("");
   const [error, setError] = useState("");
@@ -1186,6 +1197,7 @@ function CopyScreen(props: { job: Job; health: Health; onSignIn: () => void; foo
             <span>Title</span>
             <CopyButton text={l.title} label="Copy" what={`${l.english} title`} />
           </div>
+          <ReadsAs sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} />
           {l.description && (
             <>
               <textarea className="field" lang={l.code} readOnly rows={4} value={l.description} aria-label={`${l.english} description`} />

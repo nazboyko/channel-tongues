@@ -402,6 +402,35 @@ textarea.field {
   font-size: 12px;
 }
 
+.reads {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -2px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.reads.marked {
+  display: block;
+  overflow: visible;
+}
+
+.reads mark {
+  background: color-mix(in srgb, var(--check) 22%, transparent);
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--check);
+  text-underline-offset: 2px;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.reads .stale {
+  font-style: italic;
+}
+
 .original {
   font-size: 12px;
   color: var(--muted);

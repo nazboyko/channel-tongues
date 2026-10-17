@@ -1,6 +1,48 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Channel, Health, Language } from "./lib/api";
 
+/** Splits text into plain parts and marked added words (whole words, any case). */
+export function markWords(text: string, words: string[] | undefined): { text: string; added: boolean }[] {
+  if (!words || words.length === 0) return [{ text, added: false }];
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${escaped.join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  const out: { text: string; added: boolean }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (i > last) out.push({ text: text.slice(last, i), added: false });
+    out.push({ text: m[0], added: true });
+    last = i + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), added: false });
+  return out;
+}
+
+/** "Reads in English as: ..." under a translated title, added words marked. */
+export function ReadsAs(props: { sourceName: string; title?: string; line?: string; added?: string[]; stale?: boolean }) {
+  if (!props.title) return null;
+  const text = props.line ? `${props.title}. ${props.line}` : props.title;
+  const marked = (props.added?.length ?? 0) > 0;
+  // Two lines when nothing is marked; in full when words are marked, so no
+  // mark is ever cut off. Screen readers get the whole text either way.
+  return (
+    <p className={marked ? "reads marked" : "reads"} title={marked ? undefined : text}>
+      Reads in {props.sourceName} as:{" "}
+      {markWords(text, props.added).map((part, i) =>
+        part.added ? (
+          <mark key={i}>
+            <span className="sr-only">added word: </span>
+            {part.text}
+          </mark>
+        ) : (
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+      {props.stale && <span className="stale"> (before your edit)</span>}
+    </p>
+  );
+}
+
 export function Mark() {
   // Our own mark: a speech bubble drawn as twelve ticks (the icon without its tile).
   return (
