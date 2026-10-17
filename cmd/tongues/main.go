@@ -22,19 +22,19 @@ type command struct {
 
 var commands = []command{
 	{"setup", "tongues setup", "Get everything ready, one step at a time", nil},
-	{"serve", "tongues serve [--mock]", "Run the helper for the side panel", nil},
+	{"serve", "tongues serve [--mock]", "Run the helper for the side panel", runServe},
 	{"auth", "tongues auth", "Sign in a channel so translations can be published", runAuth},
 	{"signout", "tongues signout <channel>", "Sign a channel out and delete its sign-in file", runSignOut},
 	{"doctor", "tongues doctor", "Check that everything is in place", runDoctor},
 	{"video", "tongues video <id>", "Show a video and the languages it has", runVideo},
 	{"translate", "tongues translate <id> --langs popular", "Translate a video's title and description", runTranslate},
-	{"publish", "tongues publish <id> --langs popular [--apply]", "Translate and add the translations to a video", nil},
-	{"save", "tongues save <id> --langs popular", "Translate and save to a folder, no sign-in needed", nil},
+	{"publish", "tongues publish <id> --langs popular [--apply]", "Translate and add the translations to a video", runPublish},
+	{"save", "tongues save <id> --langs popular", "Translate and save to a folder, no sign-in needed", runSave},
 	{"channel", "tongues channel scan | localize --langs popular [--apply]", "Work through a whole channel", runChannel},
-	{"backups", "tongues backups <id>", "List the backups taken before each publish", nil},
-	{"restore", "tongues restore <id> <timestamp>", "Put a video's translations back the way they were", nil},
+	{"backups", "tongues backups <id>", "List the backups taken before each publish", runBackups},
+	{"restore", "tongues restore <id> <timestamp>", "Put a video's translations back the way they were", runRestore},
 	{"languages", "tongues languages", "List the languages, most watched first", runLanguages},
-	{"keep", "tongues keep add|remove|list [words]", "Words that stay exactly as written", nil},
+	{"keep", "tongues keep add|remove|list [words]", "Words that stay exactly as written", runKeep},
 }
 
 func main() {

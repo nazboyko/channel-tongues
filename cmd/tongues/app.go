@@ -1,15 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
-	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"unicode"
@@ -17,144 +12,21 @@ import (
 	"golang.org/x/text/width"
 
 	"github.com/nazboyko/channel-tongues/internal/config"
-	"github.com/nazboyko/channel-tongues/internal/store"
+	"github.com/nazboyko/channel-tongues/internal/core"
 	"github.com/nazboyko/channel-tongues/internal/youtube"
-	"github.com/nazboyko/channel-tongues/internal/youtube/fake"
 )
 
-// app wires the pieces one command needs.
+// app is the shared service plus what only the command line needs.
 type app struct {
-	cfg     *config.Config
-	mock    bool
-	store   *store.Store
-	auth    *youtube.Auth
-	backups *youtube.Backups
-	log     *slog.Logger
-	logFile io.Closer
-	fakeAPI *fake.API
+	*core.Service
 }
 
-// newApp opens the data directory. In mock mode it uses <data dir>/mock and
-// answers every YouTube call from the bundled synthetic fixtures.
 func newApp(cfg *config.Config, mock bool) (*app, error) {
-	dataDir := cfg.DataDir
-	if mock {
-		dataDir = filepath.Join(cfg.DataDir, "mock")
-	}
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return nil, err
-	}
-	st, err := store.Open(filepath.Join(dataDir, "tongues.db"))
+	svc, err := core.Open(cfg, mock)
 	if err != nil {
 		return nil, err
 	}
-	a := &app{
-		cfg:     cfg,
-		mock:    mock,
-		store:   st,
-		auth:    &youtube.Auth{DataDir: cfg.DataDir},
-		backups: &youtube.Backups{Dir: filepath.Join(dataDir, "backups")},
-	}
-	if f, err := os.OpenFile(filepath.Join(dataDir, "tongues.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-		a.log = slog.New(slog.NewTextHandler(f, nil))
-		a.logFile = f
-	} else {
-		a.log = slog.New(slog.DiscardHandler)
-	}
-	if mock {
-		a.fakeAPI = fake.New()
-		a.auth = &youtube.Auth{DataDir: dataDir, APIEndpoint: fake.Endpoint}
-	}
-	return a, nil
-}
-
-func (a *app) close() {
-	a.store.Close()
-	if a.logFile != nil {
-		a.logFile.Close()
-	}
-}
-
-// channels lists the signed-in channels (in mock mode, the fixture channels).
-func (a *app) channels() ([]youtube.Channel, error) {
-	if a.mock {
-		var out []youtube.Channel
-		for _, c := range a.fakeAPI.Channels() {
-			out = append(out, youtube.Channel{ID: c[0], Title: c[1]})
-		}
-		return out, nil
-	}
-	return a.auth.Channels()
-}
-
-// clientFor returns an API client using a channel's sign-in; with an empty
-// channelID it uses any signed-in channel (good for reads).
-func (a *app) clientFor(ctx context.Context, channelID string) (*youtube.Client, error) {
-	if a.mock {
-		if channelID == "" {
-			channelID = a.fakeAPI.Mine
-		}
-		return youtube.NewClient(ctx, youtube.ClientOptions{
-			HTTP: a.fakeAPI.Client(), Endpoint: fake.Endpoint, Store: a.store, Log: a.log, ChannelID: channelID,
-		})
-	}
-	if channelID == "" {
-		chans, err := a.auth.Channels()
-		if err != nil {
-			return nil, err
-		}
-		if len(chans) == 0 {
-			return nil, youtube.ErrNotSignedIn
-		}
-		channelID = chans[0].ID
-	}
-	httpClient, err := a.auth.HTTPClient(ctx, channelID)
-	if err != nil {
-		return nil, err
-	}
-	return youtube.NewClient(ctx, youtube.ClientOptions{
-		HTTP: httpClient, Store: a.store, Log: a.log, ChannelID: channelID,
-	})
-}
-
-// getVideo reads a video with any signed-in channel, trying the others when
-// one cannot see it (private videos are visible to their own channel only).
-func (a *app) getVideo(ctx context.Context, id string) (*youtube.Video, *youtube.Client, error) {
-	chans, err := a.channels()
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(chans) == 0 {
-		return nil, nil, youtube.ErrNotSignedIn
-	}
-	var lastErr error
-	for _, ch := range chans {
-		client, err := a.clientFor(ctx, ch.ID)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		v, err := client.GetVideo(ctx, id)
-		if err == nil {
-			return v, client, nil
-		}
-		lastErr = err
-		if !errors.Is(err, youtube.ErrVideoNotFound) {
-			return nil, nil, err
-		}
-	}
-	return nil, nil, lastErr
-}
-
-// resolveVideo accepts an id, a video link or test:N.
-func (a *app) resolveVideo(arg string) (string, error) {
-	if id, ok, err := a.cfg.TestAlias(arg); ok {
-		return id, err
-	}
-	if id, ok := youtube.ParseVideoID(arg); ok {
-		return id, nil
-	}
-	return "", fmt.Errorf("%q is not a video id or link; copy the link from the browser's address bar", arg)
+	return &app{svc}, nil
 }
 
 // parseArgs parses flags that may appear before, between or after positional

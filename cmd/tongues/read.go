@@ -14,6 +14,7 @@ import (
 func runVideo(cfg *config.Config, args []string) error {
 	fs := flag.NewFlagSet("video", flag.ContinueOnError)
 	mock := fs.Bool("mock", false, "use the bundled sample videos")
+	apply := fs.Bool("apply", false, "with set-default-language: make the change")
 	pos, err := parseArgs(fs, args)
 	if err != nil {
 		return err
@@ -25,15 +26,15 @@ func runVideo(cfg *config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer a.close()
+	defer a.Close()
 	if len(pos) >= 2 && pos[1] == "set-default-language" {
-		return runSetDefaultLanguage(a, pos)
+		return runSetDefaultLanguage(a, pos, *apply)
 	}
-	id, err := a.resolveVideo(pos[0])
+	id, err := a.ResolveVideo(pos[0])
 	if err != nil {
 		return err
 	}
-	v, _, err := a.getVideo(context.Background(), id)
+	v, _, err := a.GetVideo(context.Background(), id)
 	if err != nil {
 		return friendly(err)
 	}
@@ -131,7 +132,7 @@ func runChannelScan(cfg *config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer a.close()
+	defer a.Close()
 	chans, err := a.pickChannels(*only)
 	if err != nil {
 		return err
@@ -141,7 +142,7 @@ func runChannelScan(cfg *config.Config, args []string) error {
 		if i > 0 {
 			fmt.Println()
 		}
-		client, err := a.clientFor(ctx, ch.ID)
+		client, err := a.ClientFor(ctx, ch.ID)
 		if err != nil {
 			return err
 		}
@@ -197,7 +198,7 @@ func missingPopular(v *youtube.Video) []string {
 
 // pickChannels returns the signed-in channels, or the one named by id or title.
 func (a *app) pickChannels(only string) ([]youtube.Channel, error) {
-	chans, err := a.channels()
+	chans, err := a.Channels()
 	if err != nil {
 		return nil, err
 	}

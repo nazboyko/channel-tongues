@@ -18,13 +18,18 @@ func runAuth(cfg *config.Config, args []string) error {
 	if _, err := parseArgs(fs, args); err != nil {
 		return err
 	}
-	a := &youtube.Auth{DataDir: cfg.DataDir}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	ch, err := signIn(ctx, a, *noBrowser)
+	app, err := newApp(cfg, false)
 	if err != nil {
 		return err
 	}
+	defer app.Close()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ch, err := signIn(ctx, app.Auth, *noBrowser)
+	if err != nil {
+		return err
+	}
+	app.SignedIn(ch) // the channel name becomes a keep word
 	fmt.Printf("Signed in: %s.\n", ch.Title)
 	fmt.Println("To add another channel, run tongues auth again and pick it.")
 	return nil

@@ -72,11 +72,11 @@ func (a *app) loadSource(ctx context.Context, f *translateFlags, pos []string) (
 	if len(pos) == 0 {
 		return nil, errors.New("which video? Give a video id or link, or --title and --description-file")
 	}
-	id, err := a.resolveVideo(pos[0])
+	id, err := a.ResolveVideo(pos[0])
 	if err != nil {
 		return nil, err
 	}
-	v, _, err := a.getVideo(ctx, id)
+	v, _, err := a.GetVideo(ctx, id)
 	if err != nil {
 		return nil, friendly(err)
 	}
@@ -90,7 +90,7 @@ func (a *app) pickLanguages(spec, sourceLang, channelID string) ([]string, error
 	case "", "popular":
 		codes = append(codes, langs.Popular...)
 	case "used":
-		if saved, ok, _ := a.store.Setting("lastLanguages:" + channelID); ok && saved != "" {
+		if saved, ok, _ := a.Store.Setting("lastLanguages:" + channelID); ok && saved != "" {
 			codes = strings.Split(saved, ",")
 		} else {
 			codes = append(codes, langs.Popular...)
@@ -126,24 +126,10 @@ func (a *app) pickLanguages(spec, sourceLang, channelID string) ([]string, error
 // engine builds the translation engine for this run.
 func (a *app) engine(ctx context.Context, f *translateFlags) (*translate.Engine, *translate.Ollama) {
 	if *f.fakeModel {
-		return &translate.Engine{Model: translate.NewFakeModel(0), Parallel: *f.parallel, DetectLatin: true, Log: a.log}, nil
+		return &translate.Engine{Model: translate.NewFakeModel(0), Parallel: *f.parallel, DetectLatin: true, Log: a.Log}, nil
 	}
-	o := a.ollama(ctx, *f.model)
-	return &translate.Engine{Model: o, Parallel: *f.parallel, DetectLatin: !*f.noDetect, Log: a.log}, o
-}
-
-// ollama returns a client for the model: the flag, then TONGUES_MODEL, then
-// the best Gemma 4 that is downloaded.
-func (a *app) ollama(ctx context.Context, flagModel string) *translate.Ollama {
-	model := flagModel
-	if model == "" {
-		model = a.cfg.Model
-	}
-	o := translate.NewOllama(a.cfg.OllamaURL, model)
-	if model == "" {
-		o.PickModel(ctx)
-	}
-	return o
+	o := a.Ollama(ctx, *f.model)
+	return &translate.Engine{Model: o, Parallel: *f.parallel, DetectLatin: !*f.noDetect, Log: a.Log}, o
 }
 
 // checkModel stops early with the one command that fixes the model.
@@ -171,7 +157,7 @@ func runTranslate(cfg *config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer a.close()
+	defer a.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -197,7 +183,7 @@ func runTranslate(cfg *config.Config, args []string) error {
 		}
 		time.Sleep(time.Second)
 	}
-	keep, err := a.store.KeepWords()
+	keep, err := a.Store.KeepWords()
 	if err != nil {
 		return err
 	}
