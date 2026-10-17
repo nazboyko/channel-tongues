@@ -117,7 +117,7 @@ func runPublish(cfg *config.Config, args []string) error {
 		}
 		return err
 	}
-	printOutcome(v.ID, res)
+	printOutcome(pos[0], v.ID, res)
 	return nil
 }
 
@@ -155,7 +155,8 @@ func printPlan(plan *youtube.Plan, results []translate.Result, notes map[string]
 	}
 }
 
-func printOutcome(videoID string, res *youtube.PublishResult) {
+// printOutcome reports a publish; arg is what the person typed for the video.
+func printOutcome(arg, videoID string, res *youtube.PublishResult) {
 	fmt.Println()
 	done, failed := 0, 0
 	for _, c := range res.Changes {
@@ -165,11 +166,11 @@ func printOutcome(videoID string, res *youtube.PublishResult) {
 			fmt.Printf("  ✓ %s %s\n", pad(langs.Name(c.Lang), 18), c.Lang)
 		case youtube.OutcomeFailed:
 			failed++
-			fmt.Printf("  ✗ %s %s did not read back; run tongues video %s to look\n", pad(langs.Name(c.Lang), 18), c.Lang, videoID)
+			fmt.Printf("  ✗ %s %s did not read back; run tongues video %s to look\n", pad(langs.Name(c.Lang), 18), c.Lang, arg)
 		}
 	}
 	fmt.Printf("\nPublished %s. Backup taken first: %s\n", plural(done, "language"), res.BackupID)
-	fmt.Printf("Undo: tongues restore %s %s\n", videoID, res.BackupID)
+	fmt.Printf("Undo: tongues restore %s %s\n", arg, res.BackupID)
 	fmt.Printf("See them in Studio: https://studio.youtube.com/video/%s/translations\n", videoID)
 	if failed > 0 {
 		fmt.Printf("%s did not show up when read back.\n", plural(failed, "language"))

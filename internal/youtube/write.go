@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	yt "google.golang.org/api/youtube/v3"
 
@@ -133,6 +134,36 @@ type Writer struct {
 	Store   *store.Store
 	// Allowed refuses writes to videos outside the test list when it is set.
 	Allowed func(videoID string) error
+	// ReadBackWaits are the pauses between read-back attempts. YouTube can
+	// take a few seconds before a read shows a write it just accepted.
+	ReadBackWaits []time.Duration
+}
+
+var defaultReadBackWaits = []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second}
+
+// readBack reads the translations until done reports true or the waits run
+// out (1 unit per read). It returns the last read.
+func (w *Writer) readBack(ctx context.Context, videoID string, done func(map[string]Localization) bool) (map[string]Localization, error) {
+	waits := w.ReadBackWaits
+	if waits == nil {
+		waits = defaultReadBackWaits
+	}
+	var last map[string]Localization
+	for i := 0; ; i++ {
+		got, err := w.Client.GetLocalizations(ctx, videoID)
+		if err != nil {
+			return nil, err
+		}
+		last = got
+		if done(got) || i >= len(waits) {
+			return last, nil
+		}
+		select {
+		case <-time.After(waits[i]):
+		case <-ctx.Done():
+			return last, ctx.Err()
+		}
+	}
 }
 
 // PublishResult is what happened, per language.
@@ -226,7 +257,14 @@ func (w *Writer) Publish(ctx context.Context, v *Video, plan *Plan, jobID string
 	}
 	res.Wrote = true
 
-	after, err := w.Client.GetLocalizations(ctx, v.ID)
+	after, err := w.readBack(ctx, v.ID, func(got map[string]Localization) bool {
+		for k := range planned {
+			if got[k] != plan.Merged[k] {
+				return false
+			}
+		}
+		return true
+	})
 	if err != nil {
 		return res, fmt.Errorf("published, but reading it back failed: %w", err)
 	}
@@ -329,7 +367,7 @@ func (w *Writer) Restore(ctx context.Context, videoID, backupID string) (*Publis
 		return res, err
 	}
 	res.Wrote = true
-	after, err := w.Client.GetLocalizations(ctx, videoID)
+	after, err := w.readBack(ctx, videoID, func(got map[string]Localization) bool { return equalMaps(got, target) })
 	if err != nil {
 		return res, fmt.Errorf("restored, but reading it back failed: %w", err)
 	}

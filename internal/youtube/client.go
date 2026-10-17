@@ -40,10 +40,15 @@ type Video struct {
 	Snippet json.RawMessage `json:"-"`
 }
 
-// Languages returns the codes the video already has, most watched first.
+// Languages returns the translations the video already has, most watched
+// first. YouTube also lists the video's own language among them; that one is
+// not a translation and is left out.
 func (v *Video) Languages() []string {
 	codes := make([]string, 0, len(v.Localizations))
 	for code := range v.Localizations {
+		if v.DefaultLanguage != "" && langs.SameBase(code, v.DefaultLanguage) {
+			continue
+		}
 		codes = append(codes, code)
 	}
 	return langs.Sort(codes)

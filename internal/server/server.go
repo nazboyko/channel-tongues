@@ -402,7 +402,7 @@ func (s *Server) channelVideos(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, v := range vids {
 			items = append(items, uploadItem{
-				ID: v.ID, Title: v.Title, ChannelTitle: v.ChannelTitle, Languages: len(v.Localizations),
+				ID: v.ID, Title: v.Title, ChannelTitle: v.ChannelTitle, Languages: len(v.Languages()),
 				HasLanguage: v.DefaultLanguage != "", PublishedAt: v.PublishedAt,
 			})
 		}

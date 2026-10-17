@@ -96,7 +96,7 @@ func videoSummary(v *youtube.Video) string {
 	} else {
 		parts = append(parts, "no language set")
 	}
-	switch n := len(v.Localizations); n {
+	switch n := len(v.Languages()); n {
 	case 0:
 		parts = append(parts, "no translations yet")
 	case 1:

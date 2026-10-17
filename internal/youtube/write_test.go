@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nazboyko/channel-tongues/internal/store"
 )
@@ -64,7 +65,7 @@ func TestPlanMergeTable(t *testing.T) {
 func newWriter(t *testing.T) (*Writer, *Client, *fakeAPIRef) {
 	t.Helper()
 	c, api, st := newTestClient(t)
-	w := &Writer{Client: c, Backups: &Backups{Dir: filepath.Join(t.TempDir(), "backups")}, Store: st}
+	w := &Writer{Client: c, Backups: &Backups{Dir: filepath.Join(t.TempDir(), "backups")}, Store: st, ReadBackWaits: []time.Duration{}}
 	return w, c, &fakeAPIRef{api}
 }
 
@@ -94,8 +95,8 @@ func TestPublishCycleAndRestore(t *testing.T) {
 	if after["es"]["title"] != "Lluvia en la ventana" || after["de"]["title"] != before["de"]["title"] || after["fr"]["title"] != before["fr"]["title"] {
 		t.Fatalf("after publish %v", after)
 	}
-	if _, ok := after["en"]; ok {
-		t.Fatal("the source language must never be written as a translation")
+	if after["en"]["title"] != before["en"]["title"] || after["en"]["description"] != before["en"]["description"] {
+		t.Fatalf("the video's own language (listed by YouTube among the translations) must stay untouched: %v", after["en"])
 	}
 	used, _ := c.Ledger().UsedToday()
 	if used-usedBefore+1 != CostPublish { // +1: Prepare's read happened before usedBefore
@@ -294,5 +295,20 @@ func TestUndoKeepsALanguageAddedInStudioMeanwhile(t *testing.T) {
 	}
 	if after["it"]["title"] != "Lanterna" {
 		t.Fatalf("undo keeps what was added in Studio since: %v", after)
+	}
+}
+
+func TestReadBackWaitsForALaggingRead(t *testing.T) {
+	w, _, api := newWriter(t)
+	api.StaleReads = 2 // the next two reads after a write still show the old state, as YouTube did
+	w.ReadBackWaits = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	ctx := context.Background()
+	v, plan, _ := w.Prepare(ctx, "mockPorch02", map[string]Localization{"es": {"Linterna", "d"}}, nil)
+	res, err := w.Publish(ctx, v, plan, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changes[0].Outcome != OutcomeAdded {
+		t.Fatalf("a read that lags must not be reported as a failure: %+v", res.Changes)
 	}
 }

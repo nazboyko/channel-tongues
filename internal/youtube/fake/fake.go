@@ -42,6 +42,11 @@ type API struct {
 	// DropOnUpdate, when set, makes the next update silently drop this language
 	// so a read-back mismatch can be tested.
 	DropOnUpdate string
+	// StaleReads makes this many reads after the next write return the
+	// state from before it, the way YouTube's reads lag behind its writes.
+	StaleReads int
+	stale      map[string]map[string]any
+	staleLeft  int
 	// path, when set, keeps the videos in a file so that separate runs of the
 	// command line see each other's changes in mock mode.
 	path string
@@ -217,9 +222,16 @@ func (a *API) listVideos(w http.ResponseWriter, r *http.Request) {
 	want := parts(r)
 	var items []any
 	for _, id := range multi(r, "id") {
-		if v, ok := a.videos[id]; ok {
+		v, ok := a.videos[id]
+		if old, isStale := a.stale[id]; isStale && a.staleLeft > 0 {
+			v, ok = old, true
+		}
+		if ok {
 			items = append(items, pick(v, want))
 		}
+	}
+	if a.staleLeft > 0 {
+		a.staleLeft--
 	}
 	writeJSON(w, map[string]any{"kind": "youtube#videoListResponse", "items": orEmpty(items)})
 }
@@ -239,6 +251,11 @@ func (a *API) updateVideo(w http.ResponseWriter, r *http.Request, body map[strin
 		a.FailUpdate = ""
 		apiErr(w, 400, reason, reason)
 		return
+	}
+	if a.StaleReads > 0 {
+		a.stale = map[string]map[string]any{id: deepCopy(v).(map[string]any)}
+		a.staleLeft = a.StaleReads
+		a.StaleReads = 0
 	}
 	snippet, _ := v["snippet"].(map[string]any)
 	if want["snippet"] {

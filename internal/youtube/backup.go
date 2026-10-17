@@ -156,7 +156,12 @@ func (b *Backups) List(videoID string) ([]BackupInfo, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, BackupInfo{ID: id, TakenAt: bk.TakenAt, Reason: bk.Reason, Languages: len(bk.Localizations)})
+		var snip struct {
+			DefaultLanguage string `json:"defaultLanguage"`
+		}
+		json.Unmarshal(bk.Snippet, &snip)
+		n := len((&Video{DefaultLanguage: snip.DefaultLanguage, Localizations: bk.Localizations}).Languages())
+		out = append(out, BackupInfo{ID: id, TakenAt: bk.TakenAt, Reason: bk.Reason, Languages: n})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].TakenAt.Equal(out[j].TakenAt) {

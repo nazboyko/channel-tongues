@@ -63,6 +63,14 @@ func TestGetVideoNotFound(t *testing.T) {
 	}
 }
 
+func TestOwnLanguageIsNotCountedAsATranslation(t *testing.T) {
+	// The real API lists the default language inside localizations.
+	v := &Video{DefaultLanguage: "en", Localizations: map[string]Localization{"en": {Title: "x"}, "es": {Title: "y"}}}
+	if got := v.Languages(); len(got) != 1 || got[0] != "es" {
+		t.Fatalf("got %v", got)
+	}
+}
+
 func TestAliasLookup(t *testing.T) {
 	v := &Video{Localizations: map[string]Localization{"pt": {Title: "x"}}}
 	if l, ok := v.Localization("pt-BR"); !ok || l.Title != "x" {
