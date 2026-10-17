@@ -619,6 +619,7 @@ function PasteScreen(props: {
   useEffect(() => {
     api.usedLanguages().then(
       (used) => {
+        if (used.length === 0) return; // the twelve stay ticked
         setSelected((cur) => cur ?? new Set(used));
         setExtra((cur) => [...cur, ...used.filter((c) => !popular.includes(c) && !cur.includes(c))]);
       },
