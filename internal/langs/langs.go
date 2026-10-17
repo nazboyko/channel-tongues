@@ -169,6 +169,20 @@ var verified = []string{
 	"en-IN", "es-US", "sr-Latn",
 }
 
+// notTranslated are verified codes the list leaves out because the model did
+// not translate into them. Measured with gemma4:26b on Oct 17, 2026 (Friday
+// night Pacific), all 165 languages on test video 1, an English video. No
+// usable answer in three tries: aa ab chr cr ee haw kl lu mni mt nv sat sg ug
+// vo wo yi. A related language instead: Quechua for ay, Nigerian Pidgin for
+// ho, Italian for ie, Inuktitut for ik, Zulu for nd and nr, Kinyarwanda for
+// rn, Corsican for sc, Akan for tw, Northern Sotho for ve, French for wa.
+// Languages that only failed a check (added words, a long title) stay in the
+// list: the checks and the read-back hold those back for the person.
+var notTranslated = []string{
+	"aa", "ab", "chr", "cr", "ee", "haw", "kl", "lu", "mni", "mt", "nv", "sat", "sg", "ug", "vo", "wo", "yi",
+	"ay", "ho", "ie", "ik", "nd", "nr", "rn", "sc", "tw", "ve", "wa",
+}
+
 // cldrScripts maps CLDR's ISO 15924 script codes to the scripts we check.
 var cldrScripts = map[string]Script{
 	"Latn": Latin, "Cyrl": Cyrillic, "Grek": Greek, "Armn": Armenian, "Geor": Georgian, "Hebr": Hebrew,
@@ -237,7 +251,14 @@ func init() {
 			table[i].Native = selfName(l.Code, l.English)
 		}
 	}
+	skip := map[string]bool{}
+	for _, code := range notTranslated {
+		skip[code] = true
+	}
 	for _, code := range verified {
+		if skip[code] {
+			continue
+		}
 		if l, ok := fromCLDR(code); ok {
 			table = append(table, l)
 		}

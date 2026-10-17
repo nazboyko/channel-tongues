@@ -135,10 +135,12 @@ func TestVerifiedCodesAreInTheList(t *testing.T) {
 	for _, l := range all {
 		byCode[l.Code] = l
 	}
-	if len(all) < 160 {
+	// The 168 codes YouTube accepted, less the 28 the model did not translate,
+	// less English, English (UK) and English (India) as the source.
+	if len(all) != 137 {
 		t.Fatalf("expected the verified codes in the list, got %d languages", len(all))
 	}
-	cases := map[string]Script{"eo": Latin, "haw": Latin, "yi": Hebrew, "ti": Ethiopic, "tt": Cyrillic, "yue": Han, "bo": Tibetan, "chr": Cherokee, "iu": Syllabics, "ie": Latin, "tw": Latin, "sat": OlChiki}
+	cases := map[string]Script{"eo": Latin, "la": Latin, "ti": Ethiopic, "tt": Cyrillic, "yue": Han, "bo": Tibetan, "iu": Syllabics, "ak": Latin}
 	for code, script := range cases {
 		l, ok := byCode[code]
 		if !ok || l.English == "" || l.Native == "" || l.Script != script {
@@ -163,6 +165,28 @@ func TestVerifiedCodesAreInTheList(t *testing.T) {
 		if _, ok := byCode[refused]; ok {
 			t.Errorf("%s must not be offered", refused)
 		}
+	}
+}
+
+func TestLanguagesTheModelDidNotTranslateAreNotOffered(t *testing.T) {
+	inVerified := map[string]bool{}
+	for _, c := range verified {
+		inVerified[c] = true
+	}
+	for _, c := range notTranslated {
+		if !inVerified[c] {
+			t.Errorf("%s is not a verified code, so the note about it is wrong", c)
+		}
+		if _, ok := Get(c); ok {
+			t.Errorf("%s is offered, but the model did not translate into it", c)
+		}
+	}
+	if len(notTranslated) != 28 {
+		t.Fatalf("17 with no usable answer and 11 in a related language, got %d", len(notTranslated))
+	}
+	// Still named for a video that already has one of them.
+	if EnglishName("haw") != "Hawaiian" || Name("nv") == "nv" {
+		t.Fatal("names fall back to CLDR")
 	}
 }
 
