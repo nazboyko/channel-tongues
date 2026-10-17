@@ -57,6 +57,31 @@
   },
   {
     "kind": "youtube#video",
+    "id": "mockForest4",
+    "snippet": {
+      "publishedAt": "2026-10-08T21:00:00Z",
+      "channelId": "UCmockSlowNightHours01",
+      "channelTitle": "The Slow Night Hours",
+      "title": "Misty Pine Forest Cabin at Dawn 🌲 Gentle Rain, Crackling Fireplace & Soft Piano for Deep Sleep",
+      "description": "Settle into a small cabin deep in a misty pine forest as the first light reaches the windows. Rain taps softly on the roof, the fireplace crackles beside you, and a slow piano melody drifts in and out like the fog between the trees. This video is made for falling asleep, quieting a busy mind after a long day, or keeping a calm background while you read, study or work. There are no ads in the middle, so nothing will wake you, and the sound stays gentle from the first minute to the last.\n\nWe recorded the rain and the fire on a quiet autumn morning in the mountains, then added a soft piano written for this scene. The picture is one long take from a tripod, and the light changes slowly as the morning goes on. Nothing was added afterwards except a little gentle reverb on the piano.\n\n🌲 What you will hear\n0:00 Dawn in the forest\n12:30 Rain begins on the roof\n35:00 The fireplace is lit\n58:15 Soft piano joins in\n1:24:40 Wind through the pines\n2:10:00 Heavier rain and distant thunder\n2:48:30 The rain eases off\n3:30:00 A quiet morning with birdsong\n\nFor the best experience, use headphones or a good speaker, keep the volume low, and let the video play through the night. If you wake up, the sound will still be there, steady and soft. Many of you tell us you fall asleep before the first hour is over, so the second half is even calmer, with fewer changes and a softer piano. Leave a comment with the scene you would like us to record next, we read every one.\n\nCredits: rain and fire recorded by The Slow Night Hours, piano composed and played in our home studio, cabin footage filmed by our small team over three mornings.\n\nMore long nights for sleep and focus: https://www.youtube.com/@theslownighthours\nDownload the audio for offline listening: https://example.com/slownighthours/forest-cabin\n\nThe Slow Night Hours: long, quiet scenes for sleep, rest and focus, with a new night every week.\n\n#sleepsounds #rainsounds #cabinambience #pianoforsleep #forestrain #sleepmusic",
+      "tags": [
+        "sleep sounds",
+        "rain",
+        "fireplace",
+        "piano"
+      ],
+      "categoryId": "10",
+      "liveBroadcastContent": "none",
+      "defaultLanguage": "en",
+      "defaultAudioLanguage": "zxx",
+      "localized": {
+        "title": "Misty Pine Forest Cabin at Dawn 🌲 Gentle Rain, Crackling Fireplace & Soft Piano for Deep Sleep",
+        "description": ""
+      }
+    }
+  },
+  {
+    "kind": "youtube#video",
     "id": "mockHarbor3",
     "snippet": {
       "publishedAt": "2026-10-13T08:00:00Z",
