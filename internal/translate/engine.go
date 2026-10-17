@@ -114,26 +114,37 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 		parallel = 1
 	}
 	results := make([]Result, len(targets))
-	sem := make(chan struct{}, parallel)
-	var wg sync.WaitGroup
-	for i, lang := range targets {
-		wg.Add(1)
-		go func(i int, lang string) {
-			defer wg.Done()
+	next := make(chan int)
+	go func() {
+		defer close(next)
+		for i := range targets {
 			select {
-			case sem <- struct{}{}:
+			case next <- i: // in the order asked for, so progress reads top to bottom
 			case <-ctx.Done():
-				results[i] = Result{Lang: lang, Status: StatusCancelled}
-				send(Event{Lang: lang, Status: StatusCancelled, Result: &results[i]})
 				return
 			}
-			defer func() { <-sem }()
-			r := e.one(ctx, src, protSrc, &prot, kind, lang, send)
-			results[i] = r
-			send(Event{Lang: lang, Status: r.Status, Result: &results[i]})
-		}(i, lang)
+		}
+	}()
+	var wg sync.WaitGroup
+	for w := 0; w < min(parallel, len(targets)); w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				lang := targets[i]
+				r := e.one(ctx, src, protSrc, &prot, kind, lang, send)
+				results[i] = r
+				send(Event{Lang: lang, Status: r.Status, Result: &results[i]})
+			}
+		}()
 	}
 	wg.Wait()
+	for i, lang := range targets {
+		if results[i].Lang == "" { // never started: cancelled before its turn
+			results[i] = Result{Lang: lang, Status: StatusCancelled}
+			send(Event{Lang: lang, Status: StatusCancelled, Result: &results[i]})
+		}
+	}
 	return results
 }
 

@@ -194,6 +194,24 @@ func TestEngineEventsAndParallelLimit(t *testing.T) {
 	}
 }
 
+func TestEngineStartsLanguagesInOrder(t *testing.T) {
+	targets := []string{"es", "pt-BR", "de", "fr", "it", "pl", "nl"}
+	ok := func(Request) (Output, error) {
+		return Output{"Chuva na janela ⟦1⟧", "Chuva suave a noite toda.\n\n⟦2⟧ A chuva começa\nMais em ⟦3⟧"}, nil
+	}
+	answers := map[string][]func(Request) (Output, error){}
+	for _, l := range targets {
+		answers[l] = []func(Request) (Output, error){ok}
+	}
+	m := &scripted{answers: answers}
+	(&Engine{Model: m, Parallel: 1}).Run(context.Background(), testSource, targets, nil, nil)
+	for i, r := range m.requests {
+		if r.Lang != targets[i] {
+			t.Fatalf("one at a time means in order; call %d was %s", i, r.Lang)
+		}
+	}
+}
+
 func TestEngineCancel(t *testing.T) {
 	m := &scripted{answers: map[string][]func(Request) (Output, error){
 		"es": {answer("x ⟦1⟧", "y\n\n⟦2⟧ z\n⟦3⟧")},
