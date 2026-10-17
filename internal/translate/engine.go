@@ -71,7 +71,7 @@ type Event struct {
 // Engine runs protect, translate, check and restore for each language.
 type Engine struct {
 	Model    Model
-	Parallel int // languages at once; default 3
+	Parallel int // languages at once; default 1 (measured: Ollama is no faster with more)
 	Retries  int // retries after a failed check; default 2
 	// DetectLatin runs the one-word language check for Latin-script targets.
 	DetectLatin bool
@@ -109,7 +109,7 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 
 	parallel := e.Parallel
 	if parallel <= 0 {
-		parallel = 3
+		parallel = 1
 	}
 	results := make([]Result, len(targets))
 	sem := make(chan struct{}, parallel)

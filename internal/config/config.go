@@ -16,7 +16,6 @@ import (
 const (
 	DefaultPort      = 7312
 	DefaultOllamaURL = "http://127.0.0.1:11434"
-	DefaultModel     = "gemma4:e4b"
 	appDirName       = "channel-tongues"
 )
 
@@ -25,7 +24,9 @@ type Config struct {
 	DataDir   string
 	Port      int
 	OllamaURL string
-	Model     string
+	// Model is TONGUES_MODEL; empty means the helper picks the best Gemma 4
+	// that is downloaded.
+	Model string
 	// TestVideoIDs comes from TEST_VIDEO_IDS (environment or ./.env). When it
 	// is set, writes to any other video are refused.
 	TestVideoIDs []string
@@ -55,9 +56,6 @@ func Load() (*Config, error) {
 	}
 	if c.OllamaURL == "" {
 		c.OllamaURL = DefaultOllamaURL
-	}
-	if c.Model == "" {
-		c.Model = DefaultModel
 	}
 	ids := os.Getenv("TEST_VIDEO_IDS")
 	if ids == "" {

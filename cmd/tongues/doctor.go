@@ -78,12 +78,18 @@ func doctorChecks(ctx context.Context, cfg *config.Config) []check {
 		out = append(out, check{"Signed in", strings.Join(names, ", "), ""})
 	}
 
-	state, _ := translate.NewOllama(cfg.OllamaURL, cfg.Model).Health(ctx)
+	o := translate.NewOllama(cfg.OllamaURL, cfg.Model)
+	var state translate.ModelState
+	if cfg.Model == "" {
+		state = o.PickModel(ctx)
+	} else {
+		state, _ = o.Health(ctx)
+	}
 	switch state {
 	case translate.ModelReady:
-		out = append(out, check{"Ollama", "running", ""}, check{"Model", cfg.Model + " ready", ""})
+		out = append(out, check{"Ollama", "running", ""}, check{"Model", o.Model + " ready", ""})
 	case translate.ModelMissing:
-		out = append(out, check{"Ollama", "running", ""}, check{"Model", cfg.Model + " is not downloaded", "Run: ollama pull " + cfg.Model})
+		out = append(out, check{"Ollama", "running", ""}, check{"Model", o.Model + " is not downloaded", "Run: ollama pull " + o.Model})
 	default:
 		out = append(out, check{"Ollama", "not running", "Start the Ollama app, or run: ollama serve"})
 	}

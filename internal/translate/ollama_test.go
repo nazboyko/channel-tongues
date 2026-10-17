@@ -44,3 +44,27 @@ func TestHealthStates(t *testing.T) {
 		t.Fatalf("down: %v", down)
 	}
 }
+
+func TestPickModelPrefersTheLargerGemma(t *testing.T) {
+	serve := func(tags string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(tags)) }))
+	}
+	both := serve(`{"models":[{"name":"gemma4:e4b"},{"name":"gemma4:26b"}]}`)
+	defer both.Close()
+	o := NewOllama(both.URL, "")
+	if st := o.PickModel(context.Background()); st != ModelReady || o.Model != "gemma4:26b" {
+		t.Fatalf("got %v %s", st, o.Model)
+	}
+	small := serve(`{"models":[{"name":"gemma4:e4b"}]}`)
+	defer small.Close()
+	o = NewOllama(small.URL, "")
+	if st := o.PickModel(context.Background()); st != ModelReady || o.Model != "gemma4:e4b" {
+		t.Fatalf("got %v %s", st, o.Model)
+	}
+	none := serve(`{"models":[{"name":"llama3:8b"}]}`)
+	defer none.Close()
+	o = NewOllama(none.URL, "")
+	if st := o.PickModel(context.Background()); st != ModelMissing || o.Model != Fallback {
+		t.Fatalf("got %v %s", st, o.Model)
+	}
+}

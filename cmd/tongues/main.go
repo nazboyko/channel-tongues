@@ -27,7 +27,7 @@ var commands = []command{
 	{"signout", "tongues signout <channel>", "Sign a channel out and delete its sign-in file", runSignOut},
 	{"doctor", "tongues doctor", "Check that everything is in place", runDoctor},
 	{"video", "tongues video <id>", "Show a video and the languages it has", runVideo},
-	{"translate", "tongues translate <id> --langs popular", "Translate a video's title and description", nil},
+	{"translate", "tongues translate <id> --langs popular", "Translate a video's title and description", runTranslate},
 	{"publish", "tongues publish <id> --langs popular [--apply]", "Translate and add the translations to a video", nil},
 	{"save", "tongues save <id> --langs popular", "Translate and save to a folder, no sign-in needed", nil},
 	{"channel", "tongues channel scan | localize --langs popular [--apply]", "Work through a whole channel", runChannel},

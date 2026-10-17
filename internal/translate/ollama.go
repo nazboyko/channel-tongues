@@ -42,21 +42,29 @@ func NewOllama(baseURL, model string) *Ollama {
 	}
 }
 
-// Health tells the three states apart: not reachable, model missing, ready.
-func (o *Ollama) Health(ctx context.Context) (ModelState, error) {
+// Preferred lists the models used when none is set, best first: the larger
+// Gemma 4 when it is downloaded (as fast when warm, clearly better
+// translations in our measurements), otherwise the small one.
+var Preferred = []string{"gemma4:26b", "gemma4:e4b"}
+
+// Fallback is the model to download when none of the preferred ones is there.
+const Fallback = "gemma4:e4b"
+
+// installed lists the models Ollama has downloaded.
+func (o *Ollama) installed(ctx context.Context) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.BaseURL+"/api/tags", nil)
 	if err != nil {
-		return ModelDown, err
+		return nil, err
 	}
 	resp, err := o.HTTP.Do(req)
 	if err != nil {
-		return ModelDown, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return ModelDown, fmt.Errorf("ollama answered %s", resp.Status)
+		return nil, fmt.Errorf("ollama answered %s", resp.Status)
 	}
 	var tags struct {
 		Models []struct {
@@ -65,14 +73,54 @@ func (o *Ollama) Health(ctx context.Context) (ModelState, error) {
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return ModelDown, fmt.Errorf("ollama tags: %w", err)
+		return nil, fmt.Errorf("ollama tags: %w", err)
 	}
+	var out []string
 	for _, m := range tags.Models {
-		if sameModel(m.Name, o.Model) || sameModel(m.Model, o.Model) {
-			return ModelReady, nil
+		out = append(out, m.Name, m.Model)
+	}
+	return out, nil
+}
+
+func has(installed []string, model string) bool {
+	for _, m := range installed {
+		if sameModel(m, model) {
+			return true
 		}
 	}
+	return false
+}
+
+// Health tells the three states apart: not reachable, model missing, ready.
+func (o *Ollama) Health(ctx context.Context) (ModelState, error) {
+	installed, err := o.installed(ctx)
+	if err != nil {
+		return ModelDown, err
+	}
+	if has(installed, o.Model) {
+		return ModelReady, nil
+	}
 	return ModelMissing, nil
+}
+
+// PickModel sets o.Model to the first preferred model that is downloaded,
+// or to Fallback when none is (so the person is told to pull that one).
+func (o *Ollama) PickModel(ctx context.Context) ModelState {
+	installed, err := o.installed(ctx)
+	if err != nil {
+		if o.Model == "" {
+			o.Model = Fallback
+		}
+		return ModelDown
+	}
+	for _, m := range Preferred {
+		if has(installed, m) {
+			o.Model = m
+			return ModelReady
+		}
+	}
+	o.Model = Fallback
+	return ModelMissing
 }
 
 // sameModel compares tags, treating a missing tag as ":latest".
