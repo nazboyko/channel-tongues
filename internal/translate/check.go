@@ -125,12 +125,12 @@ func checkLines(src, out string) *Problem {
 		switch {
 		case blankSrc && !blankOut:
 			return &Problem{
-				Reason:   fmt.Sprintf("line %d of the description should be empty", i+1),
+				Reason:   "the description has a paragraph break in a new place",
 				Feedback: fmt.Sprintf("Line %d of the original is empty, so line %d must be empty too. Translate each line in place.", i+1, i+1),
 			}
 		case !blankSrc && blankOut:
 			return &Problem{
-				Reason:   fmt.Sprintf("line %d of the description went missing", i+1),
+				Reason:   "a line of the description went missing",
 				Feedback: fmt.Sprintf("Line %d is empty but the original line %d has text. Translate it.", i+1, i+1),
 			}
 		}

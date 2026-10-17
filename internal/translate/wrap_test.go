@@ -35,6 +35,11 @@ func TestJoinSoftWrapsKeepsRealStructure(t *testing.T) {
 		{"a colon", "Recorded with the following microphones and recorders:\nZoom H5"},
 		{"a closing quote", "My grandmother always called this \"the sleeping rain”\nso I kept the name"},
 		{"paragraphs", "First paragraph of the description is here\n\nSecond paragraph"},
+		// Seen in review: lines that look unfinished but are real structure.
+		{"an emoji end", "Thanks for listening and see you all next time 😊\nFollow me on Instagram ⟦3⟧"},
+		{"a credit line", "Music by Jane Doe from the Artlist library\nFootage shot on a small camera"},
+		{"a gear list", "Gear I use in this video\nCamera ⟦1⟧"},
+		{"an emoji list", "Everything you get in this pack\n✅ 50 presets for night scenes"},
 	}
 	for _, tc := range cases {
 		if got := JoinSoftWraps(tc.in); got != tc.in {
@@ -44,7 +49,7 @@ func TestJoinSoftWrapsKeepsRealStructure(t *testing.T) {
 }
 
 func TestJoinSoftWrapsJoinsSeveralLines(t *testing.T) {
-	in := "Three hours of soft rain on a wooden cabin window,\nrecorded on a quiet autumn night in the\nmountains of the north."
+	in := "Three hours of soft rain on a wooden cabin window,\nrecorded on a quiet autumn night in the\nMountains of the north."
 	if got := JoinSoftWraps(in); strings.Count(got, "\n") != 0 {
 		t.Fatalf("one sentence over three lines becomes one line: %q", got)
 	}

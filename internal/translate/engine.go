@@ -115,6 +115,10 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 	kind := VideoKind(protSrc.Title, protSrc.Description)
 
 	send := func(ev Event) {
+		if ev.Result != nil {
+			c := *ev.Result // the receiver gets its own copy: results change after the run
+			ev.Result = &c
+		}
 		if events != nil {
 			select {
 			case events <- ev:
@@ -346,11 +350,12 @@ func intersect(a, b []string) []string {
 	return out
 }
 
-// dropSharedAdditions removes words that the read-backs of at least half the
-// languages (and at least three) mark: the same English word in most
-// read-backs comes from how the model reads back ("created" for "made"), not
-// from the translations. A word another check names stays marked. It returns
-// the results that changed.
+// dropSharedAdditions removes description words that the read-backs of at
+// least half the languages (and at least three) mark: the same English word in
+// most read-backs comes from how the model reads back ("created" for "made"),
+// not from the translations. Title words stay marked, so a card held back for
+// its title is never let through by this rule, and a word another check names
+// stays marked too. It returns the results that changed.
 func dropSharedAdditions(results []Result) []int {
 	n := 0
 	counts := map[string]int{}
@@ -360,7 +365,7 @@ func dropSharedAdditions(results []Result) []int {
 		}
 		n++
 		seen := map[string]bool{}
-		for _, w := range r.Added {
+		for _, w := range r.AddedLine {
 			if s := stem(strings.ToLower(w)); !seen[s] {
 				seen[s] = true
 				counts[s]++
@@ -380,7 +385,7 @@ func dropSharedAdditions(results []Result) []int {
 	var changed []int
 	for i := range results {
 		r := &results[i]
-		if len(r.Added) == 0 {
+		if len(r.AddedLine) == 0 {
 			continue
 		}
 		otherNote := ""
@@ -399,18 +404,12 @@ func dropSharedAdditions(results []Result) []int {
 			}
 			return out
 		}
-		before := len(r.Added)
-		r.Added, r.AddedTitle, r.AddedLine = keep(r.Added), keep(r.AddedTitle), keep(r.AddedLine)
-		if len(r.Added) == before {
+		before := len(r.AddedLine)
+		r.AddedLine = keep(r.AddedLine)
+		if len(r.AddedLine) == before {
 			continue
 		}
-		if strings.HasPrefix(r.Note, "adds: ") {
-			if len(r.AddedTitle) > 0 {
-				r.Note = addedReason(r.AddedTitle)
-			} else {
-				r.Status, r.Note = StatusReady, ""
-			}
-		}
+		r.Added = append(append([]string{}, r.AddedTitle...), r.AddedLine...)
 		changed = append(changed, i)
 	}
 	return changed
@@ -456,8 +455,15 @@ func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string
 			Feedback: "This is still in " + langs.EnglishName(sourceLang) + ". Translate the title and description into " + l.English + ".",
 		}
 	}
+	name := langs.EnglishName(code)
+	if name == code { // a code no list names: say what it is not
+		return &Problem{
+			Reason:   "it does not look like it is written in " + l.English,
+			Feedback: "This is not " + l.English + ". Translate the title and description into " + l.English + ".",
+		}
+	}
 	return &Problem{
-		Reason:   "it looks like it is written in " + langs.EnglishName(code) + ", not " + l.English,
+		Reason:   "it looks like it is written in " + name + ", not " + l.English,
 		Feedback: "This is not " + l.English + ". Translate the title and description into " + l.English + ".",
 	}
 }

@@ -3,6 +3,7 @@ package translate
 import (
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -48,5 +49,26 @@ func softWrap(prev, next string) bool {
 	if len(strings.Fields(p)) < 5 {
 		return false // a short line stands on its own (a tagline, a title, an item)
 	}
-	return true
+	// Only a line that stops on a word or a comma can go on, and only when
+	// the next line clearly continues it: it starts in lowercase, or the line
+	// before ends on a small word that cannot end a sentence ("made with").
+	last, _ := utf8.DecodeLastRuneInString(p)
+	if !(unicode.IsLetter(last) || unicode.IsDigit(last) || last == ',') {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(n)
+	if unicode.IsLower(first) {
+		return true
+	}
+	words := strings.Fields(p)
+	return continuers[strings.ToLower(strings.Trim(words[len(words)-1], ","))]
+}
+
+// continuers are small words a sentence does not end on.
+var continuers = map[string]bool{}
+
+func init() {
+	for _, w := range strings.Fields("a an the and or but nor with without of to in into on onto at by for from as than that which who whose our your my their his her its this these those is are was were be been has have had not over under about through via per") {
+		continuers[w] = true
+	}
 }

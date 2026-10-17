@@ -57,7 +57,7 @@ func TestCheckTable(t *testing.T) {
 		{"links swapped between lines", "es", Output{good.Title, "Tres horas de lluvia.\n\nMás en ⟦3⟧\n⟦2⟧"}, "moved to another line"},
 		{"added hashtag in Spanish", "es", Output{"Lluvia en la cabaña #ASMR ⟦1⟧", good.Description}, "adds the hashtag #ASMR"},
 		{"added link", "es", Output{good.Title, "Tres horas de lluvia. https://spam.example\n\nMás en ⟦2⟧\n⟦3⟧"}, "adds the link https://spam.example"},
-		{"blank line filled", "es", Output{good.Title, "Tres horas de lluvia.\nAñadido nuevo.\nMás en ⟦2⟧\n⟦3⟧"}, "line 2 of the description should be empty"},
+		{"blank line filled", "es", Output{good.Title, "Tres horas de lluvia.\nAñadido nuevo.\nMás en ⟦2⟧\n⟦3⟧"}, "paragraph break in a new place"},
 		{"stray bracket", "es", Output{"Lluvia ⟦1⟧⟧ ⟦", good.Description}, "broken placeholder brackets"},
 		{"title on two lines", "es", Output{"Lluvia en la ventana\nde una cabaña ⟦1⟧", good.Description}, "split over two lines"},
 		{"added 4K in Korean", "ko", Output{"오두막 창문의 빗소리 4K ⟦1⟧", "세 시간의 빗소리.\n\n더 보기 ⟦2⟧\n⟦3⟧"}, "adds \u201c4K\u201d"},
