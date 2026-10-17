@@ -179,10 +179,17 @@ var cldrScripts = map[string]Script{
 	"Tibt": Tibetan, "Cher": Cherokee, "Cans": Syllabics, "Olck": OlChiki,
 }
 
-var nameFixes = map[string]string{"tw": "Twi"}
+// nameFixes gives distinct names where CLDR repeats another entry's name
+// (tw is "Akan" like ak, es-US is "Spanish" like es).
+var nameFixes = map[string][2]string{
+	"tw":      {"Twi", "Twi"},
+	"es-US":   {"Spanish (United States)", "Español (Estados Unidos)"},
+	"en-IN":   {"English (India)", "English (India)"},
+	"sr-Latn": {"Serbian (Latin)", "Srpski (latinica)"},
+}
 
 // scriptFixes covers codes CLDR gives no usable script for.
-var scriptFixes = map[string]Script{"ie": Latin, "tw": Latin, "bh": Devanagari, "bo": Tibetan, "dz": Tibetan, "chr": Cherokee, "cr": Syllabics, "iu": Syllabics}
+var scriptFixes = map[string]Script{"ie": Latin, "tw": Latin, "bh": Devanagari, "bo": Tibetan, "dz": Tibetan, "chr": Cherokee, "cr": Syllabics, "iu": Syllabics, "sat": OlChiki}
 
 // fromCLDR builds a table entry for a verified code.
 func fromCLDR(code string) (Language, bool) {
@@ -196,7 +203,7 @@ func fromCLDR(code string) (Language, bool) {
 	}
 	l := Language{Code: code, English: english, Native: selfName(code, english)}
 	if fix, ok := nameFixes[code]; ok {
-		l.English, l.Native = fix, fix // CLDR names tw "Akan", like ak
+		l.English, l.Native = fix[0], fix[1]
 	}
 	if sc, conf := tag.Script(); conf != language.No {
 		l.Script = cldrScripts[sc.String()]

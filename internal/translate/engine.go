@@ -455,15 +455,16 @@ func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string
 			Feedback: "This is still in " + langs.EnglishName(sourceLang) + ". Translate the title and description into " + l.English + ".",
 		}
 	}
-	name := langs.EnglishName(code)
-	if name == code { // a code no list names: say what it is not
+	known, ok := langs.Describe(code)
+	if !ok || known.English == "" || strings.HasPrefix(known.English, "Unknown") || code == "zxx" || code == "mul" {
+		// a code that names no single language: say what it is not
 		return &Problem{
 			Reason:   "it does not look like it is written in " + l.English,
 			Feedback: "This is not " + l.English + ". Translate the title and description into " + l.English + ".",
 		}
 	}
 	return &Problem{
-		Reason:   "it looks like it is written in " + name + ", not " + l.English,
+		Reason:   "it looks like it is written in " + known.English + ", not " + l.English,
 		Feedback: "This is not " + l.English + ". Translate the title and description into " + l.English + ".",
 	}
 }
@@ -471,7 +472,7 @@ func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string
 // sameFamily accepts answers the detector often confuses: Malay and
 // Indonesian, Norwegian variants, Filipino and Tagalog.
 func sameFamily(a, b string) bool {
-	groups := [][]string{{"id", "ms"}, {"no", "nb", "nn"}, {"fil", "tl"}, {"hr", "bs", "sr"}, {"ak", "tw"}} // Twi is a variety of Akan
+	groups := [][]string{{"id", "ms"}, {"no", "nb", "nn"}, {"fil", "tl"}, {"hr", "bs", "sr", "sh"}, {"ak", "tw"}} // Twi is a variety of Akan
 	in := func(g []string, c string) bool {
 		for _, x := range g {
 			if langs.SameBase(x, c) {

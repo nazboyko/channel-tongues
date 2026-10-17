@@ -138,15 +138,23 @@ func TestVerifiedCodesAreInTheList(t *testing.T) {
 	if len(all) < 160 {
 		t.Fatalf("expected the verified codes in the list, got %d languages", len(all))
 	}
-	cases := map[string]Script{"eo": Latin, "haw": Latin, "yi": Hebrew, "ti": Ethiopic, "tt": Cyrillic, "yue": Han, "bo": Tibetan, "chr": Cherokee, "iu": Syllabics, "ie": Latin, "tw": Latin}
+	cases := map[string]Script{"eo": Latin, "haw": Latin, "yi": Hebrew, "ti": Ethiopic, "tt": Cyrillic, "yue": Han, "bo": Tibetan, "chr": Cherokee, "iu": Syllabics, "ie": Latin, "tw": Latin, "sat": OlChiki}
 	for code, script := range cases {
 		l, ok := byCode[code]
 		if !ok || l.English == "" || l.Native == "" || l.Script != script {
 			t.Errorf("%s: %+v (in list %v), want script %q", code, l, ok, script)
 		}
 	}
-	if byCode["tw"].English != "Twi" || byCode["tw"].Native == byCode["ak"].Native {
-		t.Errorf("Twi and Akan need names a person can tell apart: %+v %+v", byCode["tw"], byCode["ak"])
+	// No two languages in the list share a name a person sees.
+	english, native := map[string]string{}, map[string]string{}
+	for _, l := range All("") {
+		if other, ok := english[l.English]; ok {
+			t.Errorf("%s and %s are both called %q", other, l.Code, l.English)
+		}
+		if other, ok := native[l.Native]; ok {
+			t.Errorf("%s and %s are both shown as %q", other, l.Code, l.Native)
+		}
+		english[l.English], native[l.Native] = l.Code, l.Code
 	}
 	if _, ok := byCode["en-IN"]; ok {
 		t.Fatal("English variants are left out for an English source")
