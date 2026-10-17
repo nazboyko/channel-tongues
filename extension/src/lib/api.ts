@@ -73,6 +73,8 @@ export interface JobLang {
   backLine?: string;
   /** Words in the read-back that the source does not have. */
   added?: string[];
+  /** The ones found only in the description: marked, but the card stays ticked. */
+  addedLine?: string[];
 }
 
 export interface Job {

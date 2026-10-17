@@ -971,6 +971,7 @@ function ReviewScreen(props: {
 
   const count = ticked.size;
   const toCheck = usable.filter((l) => l.status === "check").length;
+  const allTicked = usable.length > 0 && usable.every((l) => ticked.has(l.code));
   return (
     <Shell footer={props.footer}>
       {props.video && (
@@ -980,11 +981,21 @@ function ReviewScreen(props: {
         </div>
       )}
       <Heading>Look it over</Heading>
-      <p>
-        {usable.length === 0
-          ? "Nothing could be translated this time."
-          : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
-      </p>
+      <div className="sect">
+        <p>
+          {usable.length === 0
+            ? "Nothing could be translated this time."
+            : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
+        </p>
+        {usable.length > 1 && (
+          <button
+            className="link nowrap"
+            onClick={() => setTicked(allTicked ? new Set() : new Set(usable.map((l) => l.code)))}
+          >
+            {allTicked ? "Untick all" : "Tick all"}
+          </button>
+        )}
+      </div>
       {usable.map((l) => {
         const d = draftOf(l);
         const titleId = `t-${l.code}`;
@@ -1019,7 +1030,14 @@ function ReviewScreen(props: {
               onBlur={() => dirty(l) && save(l.code)}
             />
             <TitleCounter id={counterId} title={d.title} />
-            <ReadsAs sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} stale={l.edited || d.title !== l.title} />
+            <ReadsAs
+              sourceName={props.sourceName}
+              title={l.backTitle}
+              line={l.backLine}
+              added={l.added}
+              addedLine={l.addedLine}
+              stale={l.edited || d.title !== l.title}
+            />
             <textarea
               className="field"
               lang={l.code}
@@ -1197,7 +1215,7 @@ function CopyScreen(props: { job: Job; sourceName: string; health: Health; onSig
             <span>Title</span>
             <CopyButton text={l.title} label="Copy" what={`${l.english} title`} />
           </div>
-          <ReadsAs sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} />
+          <ReadsAs sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} addedLine={l.addedLine} />
           {l.description && (
             <>
               <textarea className="field" lang={l.code} readOnly rows={4} value={l.description} aria-label={`${l.english} description`} />

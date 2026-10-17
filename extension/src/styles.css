@@ -431,6 +431,16 @@ textarea.field {
   font-style: italic;
 }
 
+.reads .desc-adds {
+  font-style: italic;
+}
+
+.nowrap {
+  white-space: nowrap;
+  flex: none;
+  margin-left: 12px;
+}
+
 .original {
   font-size: 12px;
   color: var(--muted);

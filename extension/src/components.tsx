@@ -19,7 +19,14 @@ export function markWords(text: string, words: string[] | undefined): { text: st
 }
 
 /** "Reads in English as: ..." under a translated title, added words marked. */
-export function ReadsAs(props: { sourceName: string; title?: string; line?: string; added?: string[]; stale?: boolean }) {
+export function ReadsAs(props: {
+  sourceName: string;
+  title?: string;
+  line?: string;
+  added?: string[];
+  addedLine?: string[];
+  stale?: boolean;
+}) {
   if (!props.title) return null;
   const joiner = /[.!?。！？]$/.test(props.title.trim()) ? " " : ". ";
   const text = props.line ? `${props.title.trim()}${joiner}${props.line}` : props.title;
@@ -38,6 +45,9 @@ export function ReadsAs(props: { sourceName: string; title?: string; line?: stri
         ) : (
           <span key={i}>{part.text}</span>
         ),
+      )}
+      {props.addedLine && props.addedLine.length > 0 && (
+        <span className="desc-adds"> · description adds: {props.addedLine.map((w) => w.toLowerCase()).join(", ")}</span>
       )}
       {props.stale && <span className="stale"> (before your edit)</span>}
     </p>
