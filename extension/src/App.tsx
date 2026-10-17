@@ -623,10 +623,10 @@ function PasteScreen(props: {
     else next.add(c);
     setSelected(next);
   };
-  // Pasted text is read back in English, so English itself is not a target.
-  const allCodes = props.languages.map((l) => l.code).filter((c) => c.split("-")[0] !== "en");
+  // The helper finds the pasted text's language and leaves it out.
+  const allCodes = props.languages.map((l) => l.code);
   const allOn = allCodes.length > 0 && allCodes.every((c) => chosen.has(c));
-  const picked = [...props.languages.map((l) => l.code), ...codes].filter((c, i, list) => chosen.has(c) && list.indexOf(c) === i);
+  const picked = [...allCodes, ...codes].filter((c, i, list) => chosen.has(c) && list.indexOf(c) === i);
   const count = picked.length;
   return (
     <Shell footer={props.footer}>
@@ -761,7 +761,12 @@ function VideoScreen(props: {
 
   const has = (c: string) => video.languages.some((l) => l.code === c);
   const codes = [...video.shown, ...extra.filter((c) => !video.shown.includes(c))];
-  const base = (c: string) => c.split("-")[0].toLowerCase();
+  // Base subtag with the old codes YouTube still uses mapped, like the helper does.
+  const old: Record<string, string> = { iw: "he", in: "id", ji: "yi", nb: "no", tl: "fil" };
+  const base = (c: string) => {
+    const b = c.split("-")[0].toLowerCase();
+    return old[b] ?? b;
+  };
   const isSource = (c: string) => !!video.defaultLanguage && base(c) === base(video.defaultLanguage);
   // Every language the video does not have yet (the "All languages" action
   // never replaces a translation that is already there).

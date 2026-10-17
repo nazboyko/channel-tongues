@@ -186,6 +186,25 @@ func TestVideoAndUploads(t *testing.T) {
 	if len(v.Suggested) != len(all) || len(v.Shown) != 12 {
 		t.Fatalf("remembered all: suggested %d shown %v", len(v.Suggested), v.Shown)
 	}
+	// Saved on a Spanish video (no Spanish, no English variants missing):
+	// still all languages here, with English left out as the source.
+	var fromSpanish []string
+	for _, l := range langs.All("es") {
+		if !strings.HasPrefix(l.Code, "en") {
+			fromSpanish = append(fromSpanish, l.Code)
+		}
+	}
+	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(fromSpanish, ","))
+	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
+	if len(v.Suggested) != len(all) || len(v.Shown) != 12 {
+		t.Fatalf("remembered all from a Spanish video: suggested %d shown %v", len(v.Suggested), v.Shown)
+	}
+	// A hand-picked 25 is not "all": every one shows as a chip.
+	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(all[:25], ","))
+	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
+	if len(v.Suggested) != 25 || len(v.Shown) != 25 {
+		t.Fatalf("remembered 25: suggested %d shown %d", len(v.Suggested), len(v.Shown))
+	}
 	r := h.do("GET", "/video/notarealid", "", nil)
 	if r.StatusCode != 400 {
 		t.Fatalf("bad id: %d", r.StatusCode)

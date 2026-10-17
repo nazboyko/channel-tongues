@@ -339,12 +339,32 @@ func (s *Server) video(w http.ResponseWriter, r *http.Request) {
 		resp.Languages = append(resp.Languages, langRef{Code: c, Name: langs.Name(c)})
 	}
 	resp.Suggested = s.suggested(v.ChannelID, v.DefaultLanguage)
-	resp.Shown = []string{}
-	seen := map[string]bool{}
+	// A remembered "All languages" stays all languages for this video, even
+	// when it was saved on a video in another language (which misses only
+	// that language's few variants), and the chips stay the twelve: the All
+	// chip stands for the rest. Any other selection shows as chips.
+	all := langs.All(v.DefaultLanguage)
+	saved := map[string]bool{}
+	for _, c := range resp.Suggested {
+		saved[c] = true
+	}
+	missing := 0
+	for _, l := range all {
+		if !saved[l.Code] {
+			missing++
+		}
+	}
 	shown := append([]string(nil), langs.Popular...)
-	if len(resp.Suggested) <= 20 { // after "All languages" the chips stay the twelve; that chip shows the rest
+	if len(resp.Suggested) > 20 && missing <= 5 {
+		resp.Suggested = resp.Suggested[:0]
+		for _, l := range all {
+			resp.Suggested = append(resp.Suggested, l.Code)
+		}
+	} else {
 		shown = append(shown, resp.Suggested...)
 	}
+	resp.Shown = []string{}
+	seen := map[string]bool{}
 	for _, c := range shown {
 		if !seen[c] && !langs.SameBase(c, v.DefaultLanguage) {
 			seen[c] = true
