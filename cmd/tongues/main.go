@@ -21,7 +21,7 @@ type command struct {
 }
 
 var commands = []command{
-	{"setup", "tongues setup", "Get everything ready, one step at a time", nil},
+	{"setup", "tongues setup", "Get everything ready, one step at a time", runSetup},
 	{"serve", "tongues serve [--mock]", "Run the helper for the side panel", runServe},
 	{"auth", "tongues auth", "Sign in a channel so translations can be published", runAuth},
 	{"signout", "tongues signout <channel>", "Sign a channel out and delete its sign-in file", runSignOut},
