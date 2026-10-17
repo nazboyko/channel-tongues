@@ -41,6 +41,10 @@ const (
 	Hangul     Script = "Hangul"
 	Japanese   Script = "Japanese" // kana and kanji
 	Han        Script = "Han"
+	Tibetan    Script = "Tibetan"
+	Cherokee   Script = "Cherokee"
+	Syllabics  Script = "Canadian syllabics"
+	OlChiki    Script = "Ol Chiki"
 )
 
 // Language is one entry of the picker.
@@ -150,6 +154,59 @@ var table = []Language{
 	{Code: "zu", English: "Zulu", Native: "isiZulu", Script: Latin},
 }
 
+// verified are codes YouTube accepted for a video's translations on a test
+// video (Oct 16, 2026), outside the table above and YouTube's own
+// i18nLanguages list. Their names come from the Unicode CLDR data and their
+// script from CLDR's likely script; an unknown script skips the script check.
+// YouTube refused, with "invalidVideoMetadata": ae an ast av ce ceb ch ckb
+// cu cv dv gv hz ii io kg kj kr kv kw li mh ng nn ny oj os pi se ty za.
+var verified = []string{
+	"aa", "ab", "ak", "ay", "ba", "bh", "bi", "bm", "bo", "br", "chr", "co", "cr", "dz", "ee", "eo",
+	"ff", "fj", "fo", "fy", "gd", "gn", "haw", "ho", "ht", "ia", "ie", "ik", "iu", "ki", "kl", "ks",
+	"ku", "la", "lb", "lg", "ln", "lu", "mg", "mi", "mni", "mt", "na", "nd", "nr", "nv", "oc", "om",
+	"ps", "qu", "rm", "rn", "rw", "sa", "sat", "sc", "sd", "sg", "sm", "sn", "ss", "st", "su", "tg",
+	"ti", "tk", "tn", "to", "ts", "tt", "tw", "ug", "ve", "vo", "wa", "wo", "xh", "yi", "yue",
+	"en-IN", "es-US", "sr-Latn",
+}
+
+// cldrScripts maps CLDR's ISO 15924 script codes to the scripts we check.
+var cldrScripts = map[string]Script{
+	"Latn": Latin, "Cyrl": Cyrillic, "Grek": Greek, "Armn": Armenian, "Geor": Georgian, "Hebr": Hebrew,
+	"Arab": Arabic, "Deva": Devanagari, "Beng": Bengali, "Guru": Gurmukhi, "Gujr": Gujarati, "Orya": Oriya,
+	"Taml": Tamil, "Telu": Telugu, "Knda": Kannada, "Mlym": Malayalam, "Sinh": Sinhala, "Thai": Thai,
+	"Laoo": Lao, "Khmr": Khmer, "Mymr": Myanmar, "Ethi": Ethiopic, "Hang": Hangul, "Kore": Hangul,
+	"Jpan": Japanese, "Hans": Han, "Hant": Han,
+	"Tibt": Tibetan, "Cher": Cherokee, "Cans": Syllabics, "Olck": OlChiki,
+}
+
+var nameFixes = map[string]string{"tw": "Twi"}
+
+// scriptFixes covers codes CLDR gives no usable script for.
+var scriptFixes = map[string]Script{"ie": Latin, "tw": Latin, "bh": Devanagari, "bo": Tibetan, "dz": Tibetan, "chr": Cherokee, "cr": Syllabics, "iu": Syllabics}
+
+// fromCLDR builds a table entry for a verified code.
+func fromCLDR(code string) (Language, bool) {
+	tag, err := language.Parse(code)
+	if err != nil {
+		return Language{}, false
+	}
+	english := display.English.Languages().Name(tag)
+	if english == "" {
+		return Language{}, false
+	}
+	l := Language{Code: code, English: english, Native: selfName(code, english)}
+	if fix, ok := nameFixes[code]; ok {
+		l.English, l.Native = fix, fix // CLDR names tw "Akan", like ak
+	}
+	if sc, conf := tag.Script(); conf != language.No {
+		l.Script = cldrScripts[sc.String()]
+	}
+	if fix, ok := scriptFixes[code]; ok {
+		l.Script = fix
+	}
+	return l, true
+}
+
 // aliases maps codes YouTube also uses to the code in our table.
 var aliases = map[string]string{
 	"pt":    "pt-BR",
@@ -171,6 +228,11 @@ func init() {
 	for i, l := range table {
 		if l.Native == "" {
 			table[i].Native = selfName(l.Code, l.English)
+		}
+	}
+	for _, code := range verified {
+		if l, ok := fromCLDR(code); ok {
+			table = append(table, l)
 		}
 	}
 	ranked := rankAll()
@@ -273,9 +335,27 @@ func SameBase(a, b string) bool {
 	return a != "" && b != "" && base(a) == base(b)
 }
 
+// Describe returns the table entry for a code or, for a code outside the
+// table, names from the Unicode CLDR data and an unknown script (the script
+// check is then skipped, not failed). ok is false when CLDR does not know it.
+func Describe(code string) (Language, bool) {
+	if l, ok := Get(code); ok {
+		return l, true
+	}
+	tag, err := language.Parse(strings.TrimSpace(code))
+	if err != nil {
+		return Language{}, false
+	}
+	english := display.English.Languages().Name(tag)
+	if english == "" {
+		return Language{}, false
+	}
+	return Language{Code: tag.String(), English: english, Native: selfName(tag.String(), english)}, true
+}
+
 // Name is the native name for a code, or the code itself when unknown.
 func Name(code string) string {
-	if l, ok := Get(code); ok {
+	if l, ok := Describe(code); ok {
 		return l.Native
 	}
 	return code
@@ -283,7 +363,7 @@ func Name(code string) string {
 
 // EnglishName is the English name for a code, or the code itself.
 func EnglishName(code string) string {
-	if l, ok := Get(code); ok {
+	if l, ok := Describe(code); ok {
 		return l.English
 	}
 	return code

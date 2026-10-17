@@ -231,7 +231,7 @@ func checkTitleLength(title string, spans []Span) *Problem {
 const titleSeparators = "·|•—–"
 
 // noSpaceScripts are written without spaces between words.
-var noSpaceScripts = map[langs.Script]bool{langs.Japanese: true, langs.Han: true, langs.Thai: true, langs.Lao: true, langs.Khmer: true, langs.Myanmar: true}
+var noSpaceScripts = map[langs.Script]bool{langs.Japanese: true, langs.Han: true, langs.Thai: true, langs.Lao: true, langs.Khmer: true, langs.Myanmar: true, langs.Tibetan: true}
 
 // checkTitleGrowth catches a title that borrows from the description: a new
 // part after a separator, or far more words than the original has.
@@ -389,6 +389,10 @@ var scriptTables = map[langs.Script][]*unicode.RangeTable{
 	langs.Hangul:     {unicode.Hangul, unicode.Han},
 	langs.Japanese:   {unicode.Hiragana, unicode.Katakana, unicode.Han},
 	langs.Han:        {unicode.Han},
+	langs.Tibetan:    {unicode.Tibetan},
+	langs.Cherokee:   {unicode.Cherokee},
+	langs.Syllabics:  {unicode.Canadian_Aboriginal},
+	langs.OlChiki:    {unicode.Ol_Chiki},
 }
 
 // ScriptShare is the share of letters in text written in the script.
@@ -449,8 +453,8 @@ var reLatinWord = regexp.MustCompile(`[A-Za-z0-9][A-Za-z0-9'’-]*[A-Za-z0-9]`)
 // name, a brand). "ASMR" or "4K Relaxing" appearing from nowhere is flagged.
 func checkAddedLatin(src, out Output, lang string) *Problem {
 	l, ok := langs.Get(lang)
-	if !ok || l.Script == langs.Latin {
-		return nil
+	if !ok || l.Script == langs.Latin || l.Script == "" {
+		return nil // Latin-script or unknown script: nothing to compare against
 	}
 	original := strings.ToLower(stripPlaceholders(src.Title + "\n" + src.Description))
 	for field, text := range map[string]string{"title": out.Title, "description": out.Description} {

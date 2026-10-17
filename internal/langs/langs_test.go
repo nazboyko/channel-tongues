@@ -58,7 +58,13 @@ func TestAliasesAndCase(t *testing.T) {
 func TestEveryLanguageHasNamesAndScript(t *testing.T) {
 	seen := map[string]bool{}
 	for _, l := range All("") {
-		if l.English == "" || l.Native == "" || l.Script == "" {
+		verifiedOnly := false
+		for _, c := range verified {
+			verifiedOnly = verifiedOnly || c == l.Code
+		}
+		// A verified code may have an unknown script (the check is skipped);
+		// every hand-written entry has one.
+		if l.English == "" || l.Native == "" || (l.Script == "" && !verifiedOnly) {
 			t.Errorf("incomplete entry %+v", l)
 		}
 		if seen[l.Code] {
@@ -101,5 +107,61 @@ func TestSortByRank(t *testing.T) {
 func TestNames(t *testing.T) {
 	if Name("ja") != "日本語" || EnglishName("pt") != "Portuguese (Brazil)" || Name("xx") != "xx" {
 		t.Fatal("names")
+	}
+}
+
+func TestDescribeFallsBackToCLDR(t *testing.T) {
+	// Codes YouTube refuses are not in the table, but still get CLDR names.
+	for code, english := range map[string]string{"ceb": "Cebuano", "nn": "Norwegian Nynorsk", "ast": "Asturian"} {
+		l, ok := Describe(code)
+		if !ok || l.English != english || l.Native == "" || l.Script != "" {
+			t.Errorf("%s: got %+v %v", code, l, ok)
+		}
+	}
+	if l, ok := Describe("es"); !ok || l.Script != Latin {
+		t.Fatal("table entries come first")
+	}
+	if _, ok := Describe("not-a-code!"); ok {
+		t.Fatal("garbage is not a language")
+	}
+	if EnglishName("ceb") != "Cebuano" {
+		t.Fatal("EnglishName uses the fallback")
+	}
+}
+
+func TestVerifiedCodesAreInTheList(t *testing.T) {
+	all := All("en")
+	byCode := map[string]Language{}
+	for _, l := range all {
+		byCode[l.Code] = l
+	}
+	if len(all) < 160 {
+		t.Fatalf("expected the verified codes in the list, got %d languages", len(all))
+	}
+	cases := map[string]Script{"eo": Latin, "haw": Latin, "yi": Hebrew, "ti": Ethiopic, "tt": Cyrillic, "yue": Han, "bo": Tibetan, "chr": Cherokee, "iu": Syllabics, "ie": Latin, "tw": Latin}
+	for code, script := range cases {
+		l, ok := byCode[code]
+		if !ok || l.English == "" || l.Native == "" || l.Script != script {
+			t.Errorf("%s: %+v (in list %v), want script %q", code, l, ok, script)
+		}
+	}
+	if byCode["tw"].English != "Twi" || byCode["tw"].Native == byCode["ak"].Native {
+		t.Errorf("Twi and Akan need names a person can tell apart: %+v %+v", byCode["tw"], byCode["ak"])
+	}
+	if _, ok := byCode["en-IN"]; ok {
+		t.Fatal("English variants are left out for an English source")
+	}
+	for _, refused := range []string{"ceb", "ny", "nn", "zh"} {
+		if _, ok := byCode[refused]; ok {
+			t.Errorf("%s must not be offered", refused)
+		}
+	}
+}
+
+func TestEveryVerifiedCodeHasAScript(t *testing.T) {
+	for _, l := range All("") {
+		if l.Script == "" {
+			t.Errorf("%s (%s) has no script, so no script check would run", l.Code, l.English)
+		}
 	}
 }
