@@ -12,14 +12,18 @@ import (
 
 // scripted answers per language in order; the last answer repeats.
 type scripted struct {
-	mu       sync.Mutex
-	answers  map[string][]func(Request) (Output, error)
-	calls    map[string]int
-	requests []Request
-	detect   map[string]string // text prefix -> code
-	active   int32
-	maxSeen  int32
-	delay    time.Duration
+	mu          sync.Mutex
+	answers     map[string][]func(Request) (Output, error)
+	calls       map[string]int
+	requests    []Request
+	detect      map[string]string // text prefix -> code
+	backs       map[string]Back
+	confirm     []string
+	newWordsErr error
+	backCalls   int
+	active      int32
+	maxSeen     int32
+	delay       time.Duration
 }
 
 func (s *scripted) Translate(ctx context.Context, req Request) (Output, Stats, error) {
@@ -49,6 +53,28 @@ func (s *scripted) Translate(ctx context.Context, req Request) (Output, Stats, e
 	s.mu.Unlock()
 	out, err := list[i](req)
 	return out, Stats{NumCtx: 8192}, err
+}
+
+// BackTranslate answers from backs (by language), or echoes the text.
+func (s *scripted) BackTranslate(ctx context.Context, req BackRequest) (Back, Stats, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backCalls++
+	if b, ok := s.backs[req.Lang]; ok {
+		return b, Stats{}, nil
+	}
+	return Back{Title: req.Title, Line: req.Line}, Stats{}, nil
+}
+
+// NewWords confirms the candidates listed in confirm (all of them when nil).
+func (s *scripted) NewWords(ctx context.Context, req NewWordsRequest) ([]string, error) {
+	if s.newWordsErr != nil {
+		return nil, s.newWordsErr
+	}
+	if s.confirm == nil {
+		return req.Words, nil
+	}
+	return keepListed(s.confirm, req.Words), nil
 }
 
 func (s *scripted) DetectLanguage(ctx context.Context, text string) (string, error) {

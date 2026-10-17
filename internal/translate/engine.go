@@ -25,6 +25,8 @@ type Request struct {
 type Model interface {
 	Translate(ctx context.Context, req Request) (Output, Stats, error)
 	DetectLanguage(ctx context.Context, text string) (string, error)
+	BackTranslate(ctx context.Context, req BackRequest) (Back, Stats, error)
+	NewWords(ctx context.Context, req NewWordsRequest) ([]string, error)
 }
 
 // Status of one language in a job.
@@ -59,6 +61,14 @@ type Result struct {
 	Stats       []Stats       `json:"-"`
 	Problems    []string      `json:"-"` // every failed check, for measurements
 	Raw         Output        `json:"-"` // the last answer with placeholders, for recording samples
+
+	// The back-translation of the title and the first description line, and
+	// the words in it that the source does not have.
+	BackTitle    string        `json:"backTitle,omitempty"`
+	BackLine     string        `json:"backLine,omitempty"`
+	Added        []string      `json:"added,omitempty"`
+	BackDuration time.Duration `json:"-"`
+	RawBack      Back          `json:"-"` // with placeholders, for recording samples
 }
 
 // Event reports progress for one language.
@@ -75,7 +85,10 @@ type Engine struct {
 	Retries  int // retries after a failed check; default 2
 	// DetectLatin runs the one-word language check for Latin-script targets.
 	DetectLatin bool
-	Log         *slog.Logger
+	// BackTranslate adds a back-translation to every finished language and
+	// marks added words, while the next language is being translated.
+	BackTranslate bool
+	Log           *slog.Logger
 }
 
 func (e *Engine) log() *slog.Logger {
@@ -125,7 +138,7 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 			}
 		}
 	}()
-	var wg sync.WaitGroup
+	var wg, backs sync.WaitGroup
 	for w := 0; w < min(parallel, len(targets)); w++ {
 		wg.Add(1)
 		go func() {
@@ -134,11 +147,23 @@ func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []s
 				lang := targets[i]
 				r := e.one(ctx, src, protSrc, &prot, kind, lang, send)
 				results[i] = r
+				if e.BackTranslate && (r.Status == StatusReady || r.Status == StatusCheck) {
+					// The row stays "Checking" while the back-translation runs
+					// next to the next language's translation.
+					backs.Add(1)
+					go func(i int) {
+						defer backs.Done()
+						e.back(ctx, src, protSrc, &prot, &results[i])
+						send(Event{Lang: results[i].Lang, Status: results[i].Status, Result: &results[i]})
+					}(i)
+					continue
+				}
 				send(Event{Lang: lang, Status: r.Status, Result: &results[i]})
 			}
 		}()
 	}
 	wg.Wait()
+	backs.Wait()
 	for i, lang := range targets {
 		if results[i].Lang == "" { // never started: cancelled before its turn
 			results[i] = Result{Lang: lang, Status: StatusCancelled}
@@ -232,6 +257,56 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 		res.Status = StatusReady
 	}
 	return res
+}
+
+// back adds the back-translation and the added-word test to a finished
+// result. A failure here leaves the result as it was: the line is an aid,
+// the checks before it already decided.
+func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Protected, r *Result) {
+	start := time.Now()
+	defer func() { r.BackDuration = time.Since(start) }()
+	bt, st, err := e.Model.BackTranslate(ctx, BackRequest{
+		Lang: r.Lang, SourceLang: src.Language, Title: r.Raw.Title, Line: firstLine(r.Raw.Description),
+	})
+	e.log().Info("back-translation", "lang", r.Lang, "seconds", st.Total.Seconds(), "err", err)
+	if err != nil {
+		return
+	}
+	r.RawBack = bt
+	r.BackTitle = strings.TrimSpace(prot.Restore(bt.Title))
+	r.BackLine = strings.TrimSpace(prot.Restore(bt.Line))
+	original := Back{Title: protSrc.Title, Line: firstLine(protSrc.Description)}
+	candidates := CandidateWords(original, bt)
+	if len(candidates) == 0 {
+		return
+	}
+	// The candidates are judged against the whole source: a word the
+	// description says is not new to the video. (A title that borrows a whole
+	// part from the description is caught by the title-growth check.)
+	added, err := e.Model.NewWords(ctx, NewWordsRequest{
+		SourceLang: src.Language, Original: protSrc.Title + "\n" + protSrc.Description, Returned: bt, Words: candidates,
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		added = candidates // the confirming call failed: flag every candidate, the safe side
+	}
+	r.Added = added
+	if len(added) > 0 {
+		r.Problems = append(r.Problems, addedReason(added))
+	}
+	if len(added) > 0 && r.Status == StatusReady {
+		r.Status = StatusCheck
+		r.Note = addedReason(added)
+	}
+}
+
+func addedReason(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	return "adds: " + strings.Join(words, ", ")
 }
 
 // detect is the one-word language check for Latin-script targets, where the
