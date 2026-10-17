@@ -131,3 +131,18 @@ func TestEmojiAndPlainTextAreUntouched(t *testing.T) {
 		t.Fatalf("got %q %v", out, p.Spans)
 	}
 }
+
+func TestPlaceholderLikeSourceTextRoundTrips(t *testing.T) {
+	var p Protected
+	src := "Rule ⟦1⟧ and #tag, see ⟦9⟧ here"
+	out := p.Protect(src, nil)
+	if p.Restore(out) != src {
+		t.Fatalf("restore %q", p.Restore(out))
+	}
+}
+
+func TestUserMessageKeepsAmpersands(t *testing.T) {
+	if msg := UserMessage(Output{Title: "Rain & Thunder <3"}); !strings.Contains(msg, "Rain & Thunder <3") {
+		t.Fatalf("got %s", msg)
+	}
+}

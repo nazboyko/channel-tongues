@@ -136,7 +136,7 @@ func TestEngineCatchesEnglishWithTheLanguageCheck(t *testing.T) {
 		detect: map[string]string{"Rain on a cabin": "en"},
 	}
 	res := (&Engine{Model: m, DetectLatin: true}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
-	if res[0].Status != StatusCheck || res[0].Note != "it looks like it is still English" {
+	if res[0].Status != StatusCheck || res[0].Note != "it looks like it is still in English" {
 		t.Fatalf("got %+v", res[0])
 	}
 }
@@ -210,7 +210,28 @@ func TestEngineCancel(t *testing.T) {
 }
 
 func TestPlainModelError(t *testing.T) {
-	if !strings.Contains(plainModelError(errors.New("boom")), "could not translate") {
-		t.Fatal("generic")
+	if got := plainModelError(errors.New(`ollama answered 500: {"raw":"json"}`)); strings.Contains(got, "raw") {
+		t.Fatalf("raw errors must not reach the person: %q", got)
+	}
+}
+
+func TestEngineAllBadAnswersIsFailed(t *testing.T) {
+	m := &scripted{answers: map[string][]func(Request) (Output, error){
+		"es": {func(Request) (Output, error) { return Output{}, &BadAnswer{Raw: "nope"} }},
+	}}
+	res := (&Engine{Model: m}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
+	if res[0].Status != StatusFailed || res[0].Title != "" {
+		t.Fatalf("got %+v", res[0])
+	}
+}
+
+func TestEngineNormalizesWindowsLineEndings(t *testing.T) {
+	var got Request
+	m := &scripted{answers: map[string][]func(Request) (Output, error){
+		"es": {func(r Request) (Output, error) { got = r; return Output{"Lluvia", "Uno\n\nDos"}, nil }},
+	}}
+	(&Engine{Model: m}).Run(context.Background(), Source{Title: "Rain", Description: "One\r\n\r\nTwo", Language: "en"}, []string{"es"}, nil, nil)
+	if strings.Contains(got.Source.Description, "\r") {
+		t.Fatalf("carriage returns must not reach the model: %q", got.Source.Description)
 	}
 }

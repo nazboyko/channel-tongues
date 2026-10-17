@@ -177,7 +177,10 @@ func numCtx(messages []chatMessage) int {
 	}
 	// Worst case about one token per character for non-Latin output, plus
 	// the prompt itself at about two characters per token.
-	if est := runes/2 + runes + 512; est > 7500 {
+	switch est := runes/2 + runes + 512; {
+	case est > 15000:
+		return 32768
+	case est > 7500:
 		return 16384
 	}
 	return 8192
@@ -227,9 +230,15 @@ func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.R
 // ErrModelDown means Ollama stopped answering during a call.
 var ErrModelDown = fmt.Errorf("the model is not answering; start Ollama and try again")
 
+// isConnErr is true when Ollama could not be reached or dropped the
+// connection; a slow answer that timed out is not one.
 func isConnErr(err error) bool {
 	var ne net.Error
-	return errors.As(err, &ne) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
+	if errors.As(err, &ne) && ne.Timeout() {
+		return false
+	}
+	var oe *net.OpError
+	return errors.As(err, &oe) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
 }
 
 func (o *Ollama) post(ctx context.Context, path string, body []byte) (chatResponse, error) {
@@ -278,9 +287,8 @@ func (o *Ollama) Translate(ctx context.Context, req Request) (Output, Stats, err
 		{Role: "user", Content: UserMessage(req.Source)},
 	}
 	if req.Previous != nil && req.Problem != nil {
-		prev, _ := json.Marshal(toWire(*req.Previous))
 		messages = append(messages,
-			chatMessage{Role: "assistant", Content: string(prev)},
+			chatMessage{Role: "assistant", Content: marshalPlain(toWire(*req.Previous))},
 			chatMessage{Role: "user", Content: RetryMessage(req.Problem)},
 		)
 	}
@@ -306,6 +314,9 @@ func (b *BadAnswer) Error() string { return "the model's answer was not in the e
 
 // DetectLanguage asks the model which language a text is in (one short call).
 func (o *Ollama) DetectLanguage(ctx context.Context, text string) (string, error) {
+	if r := []rune(text); len(r) > 500 {
+		text = string(r[:500])
+	}
 	messages := []chatMessage{
 		{Role: "system", Content: detectSystem},
 		{Role: "user", Content: text},

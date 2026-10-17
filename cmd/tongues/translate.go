@@ -197,7 +197,10 @@ func runTranslate(cfg *config.Config, args []string) error {
 		}
 		time.Sleep(time.Second)
 	}
-	keep, _ := a.store.KeepWords()
+	keep, err := a.store.KeepWords()
+	if err != nil {
+		return err
+	}
 
 	using := "sample answers"
 	if o != nil {

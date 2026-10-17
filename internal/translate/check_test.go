@@ -47,13 +47,21 @@ func TestCheckTable(t *testing.T) {
 		{"angle brackets", "es", Output{"Lluvia <3 ⟦1⟧", good.Description}, "contains < or >"},
 		{"empty title", "es", Output{" ", good.Description}, "the title came back empty"},
 		{"untranslated title", "es", Output{src.Title, good.Description}, "the title was not translated"},
-		{"English for Japanese", "ja", Output{"Rain on a cabin window ⟦1⟧", "Three hours of rain.\n\nMore at ⟦2⟧\n⟦3⟧"}, "it looks like it is still English"},
+		{"English for Japanese", "ja", Output{"Rain on a cabin window ⟦1⟧", "Three hours of rain.\n\nMore at ⟦2⟧\n⟦3⟧"}, "not translated"},
 		{"Chinese for Japanese", "ja", Output{"小屋窗上的雨声 ⟦1⟧", "三小时的雨声。\n\n更多 ⟦2⟧\n⟦3⟧"}, "it looks like Chinese, not Japanese"},
 		{"good Japanese", "ja", Output{"山小屋の窓に降る雨 ⟦1⟧", "3時間の雨の音。\n\nもっと見る ⟦2⟧\n⟦3⟧"}, ""},
 		{"good Thai", "th", Output{"ฝนตกที่หน้าต่างกระท่อม ⟦1⟧", "เสียงฝนสามชั่วโมง\n\nดูเพิ่มเติม ⟦2⟧\n⟦3⟧"}, ""},
-		{"Latin letters for Hindi", "hi", Output{"Barish ki awaaz ⟦1⟧", "Teen ghante ki barish.\n\nAur dekhein ⟦2⟧\n⟦3⟧"}, "still English"},
+		{"Latin letters for Hindi", "hi", Output{"Barish ki awaaz ⟦1⟧", "Teen ghante ki barish.\n\nAur dekhein ⟦2⟧\n⟦3⟧"}, "not translated yet"},
 		{"Cyrillic for Ukrainian", "uk", Output{cyrillic(12) + " ⟦1⟧", cyrillic(20) + "\n\n" + cyrillic(5) + " ⟦2⟧\n⟦3⟧"}, ""},
-		{"Latin for Ukrainian", "uk", Output{"Doshch na vikni ⟦1⟧", "Try hodyny doshchu.\n\nBilshe ⟦2⟧\n⟦3⟧"}, "still English"},
+		{"Latin for Ukrainian", "uk", Output{"Doshch na vikni ⟦1⟧", "Try hodyny doshchu.\n\nBilshe ⟦2⟧\n⟦3⟧"}, "not translated yet"},
+		{"links swapped between lines", "es", Output{good.Title, "Tres horas de lluvia.\n\nMás en ⟦3⟧\n⟦2⟧"}, "moved to another line"},
+		{"added hashtag in Spanish", "es", Output{"Lluvia en la cabaña #ASMR ⟦1⟧", good.Description}, "adds the hashtag #ASMR"},
+		{"added link", "es", Output{good.Title, "Tres horas de lluvia. https://spam.example\n\nMás en ⟦2⟧\n⟦3⟧"}, "adds the link https://spam.example"},
+		{"blank line filled", "es", Output{good.Title, "Tres horas de lluvia.\nAñadido nuevo.\nMás en ⟦2⟧\n⟦3⟧"}, "line 2 of the description should be empty"},
+		{"stray bracket", "es", Output{"Lluvia ⟦1⟧⟧ ⟦", good.Description}, "broken placeholder brackets"},
+		{"title on two lines", "es", Output{"Lluvia en la ventana\nde una cabaña ⟦1⟧", good.Description}, "split over two lines"},
+		{"added 4K in Korean", "ko", Output{"오두막 창문의 빗소리 4K ⟦1⟧", "세 시간의 빗소리.\n\n더 보기 ⟦2⟧\n⟦3⟧"}, "adds \u201c4K\u201d"},
+		{"untranslated description", "es", Output{good.Title, src.Description}, "the description was not translated"},
 		{"Arabic with a brand name", "ar", Output{"المطر على نافذة الكوخ Cabin ⟦1⟧", "ثلاث ساعات من المطر.\n\nالمزيد ⟦2⟧\n⟦3⟧"}, ""},
 		{"added keyword in Korean", "ko", Output{"오두막 창문의 빗소리 ASMR ⟦1⟧", "세 시간의 빗소리.\n\n더 보기 ⟦2⟧\n⟦3⟧"}, "the title adds \u201cASMR\u201d"},
 	}
@@ -90,12 +98,24 @@ func TestNameOnlyTitleMayStayTheSame(t *testing.T) {
 	}
 }
 
-func TestDescriptionLimit(t *testing.T) {
+func TestDescriptionLimitIsInBytes(t *testing.T) {
 	if p := checkDescriptionLength(strings.Repeat("a", 5001), nil); p == nil {
-		t.Fatal("5001 characters is too long")
+		t.Fatal("5001 bytes is too long")
 	}
-	if p := checkDescriptionLength(strings.Repeat("ä", 5000), nil); p != nil {
-		t.Fatal("5000 characters (not bytes) is fine")
+	if p := checkDescriptionLength(strings.Repeat("a", 5000), nil); p != nil {
+		t.Fatal("5000 bytes is fine")
+	}
+	if p := checkDescriptionLength(strings.Repeat("ก", 2000), nil); p == nil {
+		t.Fatal("2000 Thai characters are 6000 bytes, over the limit")
+	}
+}
+
+func TestEmptySourceDescriptionMustStayEmpty(t *testing.T) {
+	if p := checkLines("", "Suscríbete para más videos."); p == nil {
+		t.Fatal("an invented description must be flagged")
+	}
+	if p := checkLines("", ""); p != nil {
+		t.Fatal("empty stays empty")
 	}
 }
 

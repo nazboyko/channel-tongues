@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	MaxTitle       = 100
-	MaxDescription = 5000
+	MaxTitle       = 100  // characters
+	MaxDescription = 5000 // bytes of UTF-8
 )
 
 // Problem is a failed check: a reason for the person ("the title is 112
@@ -37,13 +37,18 @@ type Output struct {
 func Check(src Output, out Output, spans []Span, lang string) *Problem {
 	checks := []func() *Problem{
 		func() *Problem { return checkNotEmpty(src, out) },
+		func() *Problem { return checkTitleOneLine(out.Title) },
 		func() *Problem { return checkPlaceholders("title", src.Title, out.Title, spans) },
 		func() *Problem { return checkPlaceholders("description", src.Description, out.Description, spans) },
 		func() *Problem { return checkLines(src.Description, out.Description) },
+		func() *Problem { return checkLinePlaceholders(src.Description, out.Description) },
+		func() *Problem { return checkAddedSpans(out) },
+		func() *Problem { return checkBrackets(src, out, spans) },
 		func() *Problem { return checkTitleLength(out.Title, spans) },
 		func() *Problem { return checkDescriptionLength(out.Description, spans) },
 		func() *Problem { return checkAngles(out, spans) },
 		func() *Problem { return checkTranslated(src.Title, out.Title, lang) },
+		func() *Problem { return checkDescriptionTranslated(src.Description, out.Description, lang) },
 		func() *Problem { return checkScript(out, lang) },
 		func() *Problem { return checkAddedLatin(src, out, lang) },
 	}
@@ -98,15 +103,105 @@ func lineCount(s string) int { return strings.Count(s, "\n") + 1 }
 
 func checkLines(src, out string) *Problem {
 	if strings.TrimSpace(src) == "" {
+		if strings.TrimSpace(out) != "" {
+			return &Problem{
+				Reason:   "the description has text the original does not have",
+				Feedback: "The original description is empty. Leave the description empty.",
+			}
+		}
 		return nil
 	}
 	want, got := lineCount(src), lineCount(out)
-	if want == got {
+	if want != got {
+		return &Problem{
+			Reason:   fmt.Sprintf("the description has %d lines instead of %d", got, want),
+			Feedback: fmt.Sprintf("The description must have exactly %d lines, one for each line of the original, including the empty ones. Yours has %d.", want, got),
+		}
+	}
+	srcLines, outLines := strings.Split(src, "\n"), strings.Split(out, "\n")
+	for i := range srcLines {
+		blankSrc, blankOut := strings.TrimSpace(srcLines[i]) == "", strings.TrimSpace(outLines[i]) == ""
+		switch {
+		case blankSrc && !blankOut:
+			return &Problem{
+				Reason:   fmt.Sprintf("line %d of the description should be empty", i+1),
+				Feedback: fmt.Sprintf("Line %d of the original is empty, so line %d must be empty too. Translate each line in place.", i+1, i+1),
+			}
+		case !blankSrc && blankOut:
+			return &Problem{
+				Reason:   fmt.Sprintf("line %d of the description went missing", i+1),
+				Feedback: fmt.Sprintf("Line %d is empty but the original line %d has text. Translate it.", i+1, i+1),
+			}
+		}
+	}
+	return nil
+}
+
+// checkLinePlaceholders: every line keeps its own placeholders, so two links
+// cannot swap lines.
+func checkLinePlaceholders(src, out string) *Problem {
+	srcLines, outLines := strings.Split(src, "\n"), strings.Split(out, "\n")
+	if len(srcLines) != len(outLines) {
+		return nil // checkLines reports this
+	}
+	for i := range srcLines {
+		want, got := placeholderCounts(srcLines[i]), placeholderCounts(outLines[i])
+		if len(want) != len(got) {
+			return lineMoved(i)
+		}
+		for id, n := range want {
+			if got[id] != n {
+				return lineMoved(i)
+			}
+		}
+	}
+	return nil
+}
+
+func lineMoved(i int) *Problem {
+	return &Problem{
+		Reason:   fmt.Sprintf("a link or tag moved to another line (line %d)", i+1),
+		Feedback: fmt.Sprintf("Line %d must keep exactly the placeholders of the original line %d, no more and no fewer.", i+1, i+1),
+	}
+}
+
+// checkAddedSpans: any link, hashtag, handle, e-mail address or timestamp
+// still in the answer is new, because every real one became a placeholder.
+func checkAddedSpans(out Output) *Problem {
+	for field, text := range map[string]string{"title": out.Title, "description": out.Description} {
+		var p Protected
+		p.Protect(stripPlaceholders(text), nil)
+		if len(p.Spans) > 0 {
+			sp := p.Spans[0]
+			return &Problem{
+				Reason:   fmt.Sprintf("the %s adds %s, which the original does not have", field, sp.describe()),
+				Feedback: fmt.Sprintf("The %s contains %q, which is not in the original. Remove it; add nothing.", field, sp.Text),
+			}
+		}
+	}
+	return nil
+}
+
+// checkBrackets: no stray placeholder brackets survive the restore.
+func checkBrackets(src, out Output, spans []Span) *Problem {
+	p := Protected{Spans: spans}
+	count := func(s string) int { return strings.Count(s, "⟦") + strings.Count(s, "⟧") }
+	if count(p.Restore(out.Title)) > count(p.Restore(src.Title)) || count(p.Restore(out.Description)) > count(p.Restore(src.Description)) {
+		return &Problem{
+			Reason:   "it has broken placeholder brackets in it",
+			Feedback: "Your answer has stray ⟦ or ⟧ characters. Use each placeholder exactly as given, like ⟦1⟧, and nothing else with those brackets.",
+		}
+	}
+	return nil
+}
+
+func checkTitleOneLine(title string) *Problem {
+	if !strings.Contains(title, "\n") {
 		return nil
 	}
 	return &Problem{
-		Reason:   fmt.Sprintf("the description has %d lines instead of %d", got, want),
-		Feedback: fmt.Sprintf("The description must have exactly %d lines, one for each line of the original, including the empty ones. Yours has %d.", want, got),
+		Reason:   "the title is split over two lines",
+		Feedback: "The title must be a single line.",
 	}
 }
 
@@ -129,14 +224,16 @@ func checkTitleLength(title string, spans []Span) *Problem {
 	}
 }
 
+// checkDescriptionLength: YouTube limits descriptions to 5,000 bytes, so a
+// description in Thai or Hindi reaches the limit sooner than in English.
 func checkDescriptionLength(desc string, spans []Span) *Problem {
-	n := restoredLength(desc, spans)
-	if n <= MaxDescription {
+	p := Protected{Spans: spans}
+	if n := len(p.Restore(desc)); n <= MaxDescription {
 		return nil
 	}
 	return &Problem{
-		Reason:   fmt.Sprintf("the description is %d characters, YouTube allows %d", n, MaxDescription),
-		Feedback: fmt.Sprintf("The description is %d characters. Keep it under %d by translating more concisely; drop nothing.", n, MaxDescription),
+		Reason:   "the description is too long for YouTube in this language",
+		Feedback: "The description is too long. Translate more concisely so it stays under YouTube's limit; drop nothing.",
 	}
 }
 
@@ -172,6 +269,18 @@ func checkTranslated(src, out, lang string) *Problem {
 	return &Problem{
 		Reason:   "the title was not translated",
 		Feedback: fmt.Sprintf("The title is still in the original language. Translate it into %s.", langs.EnglishName(lang)),
+	}
+}
+
+// checkDescriptionTranslated: a description identical to the original was
+// not translated (when it has enough words to translate).
+func checkDescriptionTranslated(src, out, lang string) *Problem {
+	if countLetters(stripPlaceholders(src)) < 12 || normalizeSpace(src) != normalizeSpace(out) {
+		return nil
+	}
+	return &Problem{
+		Reason:   "the description was not translated",
+		Feedback: fmt.Sprintf("The description is still in the original language. Translate it into %s.", langs.EnglishName(lang)),
 	}
 }
 
@@ -262,7 +371,7 @@ func checkScript(out Output, lang string) *Problem {
 	}
 	reason := fmt.Sprintf("it does not look like it is written in %s", l.English)
 	if l.Script != langs.Latin && ScriptShare(text, langs.Latin) > 0.5 {
-		reason = "it looks like it is still English"
+		reason = "it looks like it is not translated yet"
 	}
 	return &Problem{
 		Reason:   reason,
@@ -270,7 +379,7 @@ func checkScript(out Output, lang string) *Problem {
 	}
 }
 
-var reLatinWord = regexp.MustCompile(`[A-Za-z][A-Za-z0-9'’-]*[A-Za-z0-9]`)
+var reLatinWord = regexp.MustCompile(`[A-Za-z0-9][A-Za-z0-9'’-]*[A-Za-z0-9]`)
 
 // checkAddedLatin catches added keywords in languages not written in Latin
 // letters: every Latin word in the answer must come from the original (a
@@ -283,6 +392,9 @@ func checkAddedLatin(src, out Output, lang string) *Problem {
 	original := strings.ToLower(stripPlaceholders(src.Title + "\n" + src.Description))
 	for field, text := range map[string]string{"title": out.Title, "description": out.Description} {
 		for _, w := range reLatinWord.FindAllString(stripPlaceholders(text), -1) {
+			if !strings.ContainsAny(w, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
+				continue // plain numbers are fine
+			}
 			if !strings.Contains(original, strings.ToLower(w)) {
 				return &Problem{
 					Reason:   fmt.Sprintf("the %s adds \u201c%s\u201d, which the original does not have", field, w),

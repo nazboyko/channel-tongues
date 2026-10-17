@@ -88,6 +88,8 @@ func (e *Engine) log() *slog.Logger {
 // Run translates src into every language and returns the results in the
 // order of langs. Progress goes to events (may be nil), which is not closed.
 func (e *Engine) Run(ctx context.Context, src Source, targets []string, keep []string, events chan<- Event) []Result {
+	src.Title = strings.TrimSpace(strings.ReplaceAll(src.Title, "\r", ""))
+	src.Description = strings.ReplaceAll(src.Description, "\r\n", "\n")
 	var prot Protected
 	protSrc := Output{
 		Title:       prot.Protect(src.Title, keep),
@@ -146,6 +148,7 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 	req := Request{Lang: lang, SourceLang: src.Language, Kind: kind, Source: protSrc}
 	var last Output
 	var lastProblem *Problem
+	answered := false
 	for attempt := 0; attempt <= retries; attempt++ {
 		if ctx.Err() != nil {
 			res.Status = StatusCancelled
@@ -163,27 +166,32 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 				res.Status = StatusCancelled
 				return res
 			case errors.As(err, &bad):
-				lastProblem = &Problem{
+				shape := &Problem{
 					Reason:   "the model's answer was not in the expected shape",
 					Feedback: `Reply with JSON only, in the shape {"title": "...", "lines": ["..."]}.`,
 				}
-				res.Problems = append(res.Problems, lastProblem.Reason)
+				if !answered {
+					lastProblem = shape // otherwise keep the problem of the answer that will be shown
+				}
+				res.Problems = append(res.Problems, shape.Reason)
 				res.Retries = attempt
 				continue
 			default:
+				e.log().Warn("model error", "lang", lang, "err", err)
 				res.Status = StatusFailed
 				res.Note = plainModelError(err)
 				res.Duration = time.Since(start)
 				return res
 			}
 		}
+		answered = true
 		send(Event{Lang: lang, Status: StatusChecking})
 		out.Title = strings.TrimSpace(Normalize(out.Title))
 		out.Description = RepairLines(protSrc.Description, Normalize(out.Description))
 		last = out
 		problem := Check(protSrc, out, prot.Spans, lang)
 		if problem == nil && e.DetectLatin {
-			problem = e.detect(ctx, out, lang)
+			problem = e.detect(ctx, out, lang, src.Language)
 		}
 		res.Retries = attempt
 		if problem == nil {
@@ -195,6 +203,12 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 		prev := out
 		req.Previous = &prev
 		req.Problem = problem
+	}
+	if !answered {
+		res.Status = StatusFailed
+		res.Note = "the model did not give a usable answer; try again"
+		res.Duration = time.Since(start)
+		return res
 	}
 	res.Raw = last
 	res.Title = prot.Restore(last.Title)
@@ -211,7 +225,7 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 
 // detect is the one-word language check for Latin-script targets, where the
 // script alone cannot tell Spanish from English.
-func (e *Engine) detect(ctx context.Context, out Output, lang string) *Problem {
+func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string) *Problem {
 	l, ok := langs.Get(lang)
 	if !ok || l.Script != langs.Latin {
 		return nil
@@ -227,10 +241,10 @@ func (e *Engine) detect(ctx context.Context, out Output, lang string) *Problem {
 	if langs.SameBase(code, lang) || sameFamily(code, lang) {
 		return nil
 	}
-	if langs.SameBase(code, "en") {
+	if sourceLang != "" && langs.SameBase(code, sourceLang) {
 		return &Problem{
-			Reason:   "it looks like it is still English",
-			Feedback: "This is still English. Translate the title and description into " + l.English + ".",
+			Reason:   "it looks like it is still in " + langs.EnglishName(sourceLang),
+			Feedback: "This is still in " + langs.EnglishName(sourceLang) + ". Translate the title and description into " + l.English + ".",
 		}
 	}
 	return &Problem{
@@ -259,13 +273,13 @@ func sameFamily(a, b string) bool {
 	return false
 }
 
+// plainModelError is the one sentence a person reads; the raw error goes to the log.
 func plainModelError(err error) string {
 	if errors.Is(err, ErrModelDown) {
 		return "the model stopped answering; start Ollama and try again"
 	}
-	msg := err.Error()
-	if strings.Contains(msg, "ollama pull") {
+	if msg := err.Error(); strings.Contains(msg, "ollama pull") {
 		return msg
 	}
-	return "the model could not translate this one: " + msg
+	return "the model could not translate this one; try again"
 }

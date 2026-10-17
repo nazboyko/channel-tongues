@@ -117,9 +117,15 @@ func (w wire) output() Output {
 }
 
 // UserMessage carries the protected source fields as JSON.
-func UserMessage(src Output) string {
-	b, _ := json.Marshal(toWire(src))
-	return string(b)
+func UserMessage(src Output) string { return marshalPlain(toWire(src)) }
+
+// marshalPlain encodes JSON without HTML escaping, so "&" stays "&" for the model.
+func marshalPlain(v any) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.Encode(v)
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // schemaFor constrains the answer to a title and exactly n lines.

@@ -81,6 +81,7 @@ func (p *Protected) Protect(text string, keep []string) string {
 			cands = append(cands, candidate{s, e, kind, prio})
 		}
 	}
+	add(rePlaceholder, 0, KindKeep, 7) // text that already looks like a placeholder
 	add(reURL, 0, KindURL, 6)
 	add(reEmail, 0, KindEmail, 5)
 	add(reHandle, 1, KindHandle, 4)
