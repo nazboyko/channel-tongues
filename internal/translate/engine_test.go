@@ -181,6 +181,34 @@ func TestEngineRetriesABadAnswer(t *testing.T) {
 	}
 }
 
+// After an answer that ran to the length cap, the next tries avoid repeats;
+// a bad answer that was not cut off retries as before.
+func TestEngineGuardsTheRetryAfterACutOffAnswer(t *testing.T) {
+	good := answer("Pluie sur la fenêtre d'un chalet · 3 heures ⟦1⟧", "Pluie douce toute la nuit.\n\n⟦2⟧ La pluie commence\nPlus sur ⟦3⟧")
+	loops := func(req Request) (Output, error) {
+		if req.AvoidRepeats {
+			return good(req)
+		}
+		return Output{}, &BadAnswer{Raw: `{"title":"Pluie","lines":["pluie, pluie, pluie`, CutOff: true}
+	}
+	m := &scripted{answers: map[string][]func(Request) (Output, error){"fr": {loops}}}
+	res := (&Engine{Model: m}).Run(context.Background(), testSource, []string{"fr"}, nil, nil)
+	if res[0].Status != StatusReady || res[0].Retries != 1 || !strings.Contains(res[0].Problems[0], "length limit") {
+		t.Fatalf("got %+v", res[0])
+	}
+	if m.requests[0].AvoidRepeats || !m.requests[1].AvoidRepeats {
+		t.Fatalf("only the retry avoids repeats: %+v", m.requests)
+	}
+
+	plain := &scripted{answers: map[string][]func(Request) (Output, error){
+		"fr": {func(Request) (Output, error) { return Output{}, &BadAnswer{Raw: "Sure! Here is"} }, good},
+	}}
+	(&Engine{Model: plain}).Run(context.Background(), testSource, []string{"fr"}, nil, nil)
+	if plain.requests[1].AvoidRepeats {
+		t.Fatal("a bad answer that was not cut off retries unchanged")
+	}
+}
+
 func TestEngineModelDown(t *testing.T) {
 	m := &scripted{answers: map[string][]func(Request) (Output, error){
 		"es": {func(Request) (Output, error) { return Output{}, ErrModelDown }},

@@ -21,6 +21,9 @@ type Request struct {
 	TitleLimit int      // characters the protected title may use, so the restored one fits YouTube's 100
 	Previous   *Output  // the answer that failed a check, for a retry
 	Problem    *Problem // what was wrong with it
+	// AvoidRepeats is set after an answer ran to the length cap: the call
+	// penalizes repeating the last few tokens.
+	AvoidRepeats bool
 }
 
 // Model is the local model, or a fake one in tests and mock mode.
@@ -244,6 +247,12 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 				shape := &Problem{
 					Reason:   "the model's answer was not in the expected shape",
 					Feedback: `Reply with JSON only, in the shape {"title": "...", "lines": ["..."]}.`,
+				}
+				if bad.CutOff {
+					// The same request again loops the same way; every
+					// later try for this language avoids repeats.
+					req.AvoidRepeats = true
+					shape.Reason = "the model's answer ran to the length limit, repeating itself"
 				}
 				if !answered {
 					lastProblem = shape // otherwise keep the problem of the answer that will be shown

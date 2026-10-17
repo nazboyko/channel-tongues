@@ -144,6 +144,7 @@ type Stats struct {
 	PromptEval   time.Duration `json:"promptEval"` // reading the prompt
 	Eval         time.Duration `json:"eval"`       // writing the answer: output tokens per second is OutputTokens / Eval
 	Total        time.Duration `json:"total"`
+	CutOff       bool          `json:"cutOff,omitempty"` // the answer stopped at the num_predict cap
 }
 
 type chatMessage struct {
@@ -164,6 +165,7 @@ type chatRequest struct {
 type chatResponse struct {
 	Message            chatMessage `json:"message"`
 	Done               bool        `json:"done"`
+	DoneReason         string      `json:"done_reason"` // "length" when the answer hit num_predict
 	PromptEvalCount    int         `json:"prompt_eval_count"`
 	EvalCount          int         `json:"eval_count"`
 	LoadDuration       int64       `json:"load_duration"`
@@ -206,10 +208,25 @@ func numPredict(messages []chatMessage) int {
 	return 2*runes + 256
 }
 
-// chat sends one non-streaming chat request with a JSON schema. It retries
-// once on a connection error.
-func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.RawMessage, temperature float64) (string, Stats, error) {
+// repeatGuard goes on a translation after an answer that ran to the cap: a
+// strong penalty on the last 8 tokens only. On the long sample, Hindi wrote
+// its word for "reading" over and over for "read, study" until the cap on 31
+// of 35 tries; a retry with a note, or at a higher temperature, looped again
+// or wrote "reading" three times, and a milder penalty left it twice. With
+// this the answer reads "reading, studying" (3 of 3 replays), and Hindi came
+// through on the retry in 7 of 7 runs. First tries go without it, so a
+// language that does not loop is translated exactly as before.
+var repeatGuard = map[string]any{"repeat_penalty": 1.5, "repeat_last_n": 8}
+
+// chat sends one non-streaming chat request with a JSON schema; extra options
+// (may be nil) are added to the usual ones. It retries once on a connection
+// error.
+func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.RawMessage, temperature float64, extra map[string]any) (string, Stats, error) {
 	n := numCtx(messages)
+	options := map[string]any{"num_ctx": n, "temperature": temperature, "num_predict": numPredict(messages)}
+	for k, v := range extra {
+		options[k] = v
+	}
 	body, err := json.Marshal(chatRequest{
 		Model:     o.Model,
 		Messages:  messages,
@@ -217,7 +234,7 @@ func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.R
 		Format:    schema,
 		Think:     false,
 		KeepAlive: "30m",
-		Options:   map[string]any{"num_ctx": n, "temperature": temperature, "num_predict": numPredict(messages)},
+		Options:   options,
 	})
 	if err != nil {
 		return "", Stats{}, err
@@ -245,6 +262,7 @@ func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.R
 		PromptEval:   time.Duration(resp.PromptEvalDuration),
 		Eval:         time.Duration(resp.EvalDuration),
 		Total:        time.Duration(resp.TotalDuration),
+		CutOff:       resp.DoneReason == "length",
 	}
 	return resp.Message.Content, st, nil
 }
@@ -315,7 +333,11 @@ func (o *Ollama) Translate(ctx context.Context, req Request) (Output, Stats, err
 		)
 	}
 	lines := strings.Count(req.Source.Description, "\n") + 1
-	content, st, err := o.chat(ctx, messages, schemaFor(lines), 0.2)
+	var extra map[string]any
+	if req.AvoidRepeats {
+		extra = repeatGuard
+	}
+	content, st, err := o.chat(ctx, messages, schemaFor(lines), 0.2, extra)
 	if err != nil {
 		if isConnErr(err) {
 			return Output{}, st, ErrModelDown
@@ -324,13 +346,18 @@ func (o *Ollama) Translate(ctx context.Context, req Request) (Output, Stats, err
 	}
 	var w wire
 	if err := json.Unmarshal([]byte(content), &w); err != nil {
-		return Output{}, st, &BadAnswer{Raw: content}
+		return Output{}, st, &BadAnswer{Raw: content, CutOff: st.CutOff}
 	}
 	return w.output(), st, nil
 }
 
-// BadAnswer is a reply that is not the JSON that was asked for.
-type BadAnswer struct{ Raw string }
+// BadAnswer is a reply that is not the JSON that was asked for. CutOff means
+// it stopped at the length cap, which in practice is the model writing the
+// same word over and over.
+type BadAnswer struct {
+	Raw    string
+	CutOff bool
+}
 
 func (b *BadAnswer) Error() string { return "the model's answer was not in the expected shape" }
 
@@ -343,7 +370,7 @@ func (o *Ollama) DetectLanguage(ctx context.Context, text string) (string, Stats
 		{Role: "system", Content: detectSystem},
 		{Role: "user", Content: text},
 	}
-	content, st, err := o.chat(ctx, messages, detectSchema, 0)
+	content, st, err := o.chat(ctx, messages, detectSchema, 0, nil)
 	if err != nil {
 		return "", st, err
 	}

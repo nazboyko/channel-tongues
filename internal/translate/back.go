@@ -57,7 +57,7 @@ func (o *Ollama) BackTranslate(ctx context.Context, req BackRequest) (Back, Stat
 		{Role: "system", Content: fmt.Sprintf(backSystem, langs.EnglishName(req.Lang), source, source)},
 		{Role: "user", Content: marshalPlain(Back{Title: req.Title, Line: req.Line})},
 	}
-	content, st, err := o.chat(ctx, messages, backSchema, 0)
+	content, st, err := o.chat(ctx, messages, backSchema, 0, nil)
 	if err != nil {
 		return Back{}, st, err
 	}
@@ -83,7 +83,7 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, S
 		{Role: "system", Content: newWordsSystem},
 		{Role: "user", Content: marshalPlain(payload)},
 	}
-	content, st, err := o.chat(ctx, messages, newWordsSchema, 0)
+	content, st, err := o.chat(ctx, messages, newWordsSchema, 0, nil)
 	if err != nil {
 		return nil, st, err
 	}

@@ -3,6 +3,7 @@ package translate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -84,7 +85,7 @@ func TestChatCapsTheAnswerLength(t *testing.T) {
 	defer srv.Close()
 	o := NewOllama(srv.URL, "gemma4:e4b")
 	text := strings.Repeat("rain ", 100) // 500 characters to translate
-	if _, _, err := o.chat(context.Background(), []chatMessage{{Role: "system", Content: "long instructions " + text}, {Role: "user", Content: text}}, nil, 0); err != nil {
+	if _, _, err := o.chat(context.Background(), []chatMessage{{Role: "system", Content: "long instructions " + text}, {Role: "user", Content: text}}, nil, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Twice the text plus room for the JSON: a real answer fits, a runaway
@@ -137,5 +138,42 @@ func TestChatKeepsTheTimings(t *testing.T) {
 	code, st, err := NewOllama(srv.URL, "gemma4:26b").DetectLanguage(context.Background(), "Lluvia")
 	if err != nil || code != "es" || st.PromptTokens != 120 || st.OutputTokens != 6 || st.Load.Seconds() != 4 || st.Eval.Milliseconds() != 60 || st.PromptEval.Milliseconds() != 90 {
 		t.Fatalf("got %q %+v %v", code, st, err)
+	}
+}
+
+// An answer that ran to the cap comes back as a cut-off bad answer, and the
+// retry asks Ollama to penalize repeats; a first try does not.
+func TestTranslateFlagsACutOffAnswerAndGuardsTheRetry(t *testing.T) {
+	var options []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Options map[string]any `json:"options"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		options = append(options, body.Options)
+		if len(options) == 1 {
+			w.Write([]byte(`{"message":{"role":"assistant","content":"{\"title\":\"वर्षा\",\"lines\":[\"पढ़ते, पढ़ते, पढ़ते, पढ़ते"},"done":true,"done_reason":"length","eval_count":4172}`))
+			return
+		}
+		w.Write([]byte(`{"message":{"role":"assistant","content":"{\"title\":\"वर्षा\",\"lines\":[\"पढ़ते, पढ़ाई करते\"]}"},"done":true,"done_reason":"stop"}`))
+	}))
+	defer srv.Close()
+	o := NewOllama(srv.URL, "gemma4:26b")
+	req := Request{Lang: "hi", SourceLang: "en", Source: Output{Title: "Rain", Description: "read, study"}}
+	_, st, err := o.Translate(context.Background(), req)
+	var bad *BadAnswer
+	if !errors.As(err, &bad) || !bad.CutOff || !st.CutOff {
+		t.Fatalf("want a cut-off bad answer, got %v %+v", err, st)
+	}
+	req.AvoidRepeats = true
+	out, st, err := o.Translate(context.Background(), req)
+	if err != nil || st.CutOff || out.Description != "पढ़ते, पढ़ाई करते" {
+		t.Fatalf("got %+v %+v %v", out, st, err)
+	}
+	if _, ok := options[0]["repeat_penalty"]; ok {
+		t.Fatalf("a first try goes as before: %v", options[0])
+	}
+	if options[1]["repeat_penalty"] != 1.5 || options[1]["repeat_last_n"] != float64(8) {
+		t.Fatalf("retry options %v", options[1])
 	}
 }
