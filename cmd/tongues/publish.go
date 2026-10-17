@@ -86,7 +86,9 @@ func runPublish(cfg *config.Config, args []string) error {
 			replace[langs.Canonical(c)] = true
 		}
 	}
-	v, plan, err := writer.Prepare(ctx, v.ID, ours, replace)
+	unlock := a.LockVideo(v.ID)
+	defer unlock()
+	v, plan, err := writer.Prepare(ctx, v.ID, ours, replace) // a fresh read: translating took a while
 	if err != nil {
 		return friendly(err)
 	}
@@ -452,7 +454,7 @@ func runChannelLocalize(cfg *config.Config, args []string) error {
 			fmt.Printf("%s  nothing ready; %d to check\n", line, checks)
 			continue
 		}
-		fresh, plan, err := writer.Prepare(ctx, v.ID, ours, nil)
+		fresh, plan, err := writer.PrepareFrom(v, ours, nil) // Publish re-reads and refuses if the video changed
 		if err != nil {
 			fmt.Printf("%s  %v\n", line, err)
 			continue

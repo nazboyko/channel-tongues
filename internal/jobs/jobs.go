@@ -48,7 +48,7 @@ type Lang struct {
 
 // Snapshot is a job as the panel sees it.
 type Snapshot struct {
-	ID                string `json:"id"`
+	ID string `json:"id"`
 	Meta
 	State             string `json:"state"`
 	SourceTitle       string `json:"sourceTitle"`
@@ -149,8 +149,10 @@ func (r *Runner) run(ctx context.Context, j *job) {
 			}
 			l.Status = ev.Status
 			if ev.Result != nil {
-				l.Title = ev.Result.Title
-				l.Description = ev.Result.Description
+				if !l.Edited {
+					l.Title = ev.Result.Title
+					l.Description = ev.Result.Description
+				}
 				l.Note = ev.Result.Note
 				l.Seconds = ev.Result.Duration.Seconds()
 				l.Retries = ev.Result.Retries
@@ -177,16 +179,23 @@ func (r *Runner) run(ctx context.Context, j *job) {
 	}
 	for _, res := range results {
 		l := j.langs[res.Lang]
-		l.Status, l.Title, l.Description, l.Note = res.Status, res.Title, res.Description, res.Note
+		l.Status, l.Note = res.Status, res.Note
 		l.Seconds, l.Retries = res.Duration.Seconds(), res.Retries
+		if !l.Edited { // the person's own text wins over the model's
+			l.Title, l.Description = res.Title, res.Description
+		}
 		j.results[res.Lang] = res
 		r.Store.SaveTranslation(store.TranslationRow{
-			JobID: j.id, Lang: res.Lang, Status: string(res.Status), Title: res.Title, Description: res.Description,
-			Note: res.Note, Seconds: res.Duration.Seconds(), Retries: res.Retries,
+			JobID: j.id, Lang: res.Lang, Status: string(res.Status), Title: l.Title, Description: l.Description,
+			Note: res.Note, Seconds: res.Duration.Seconds(), Retries: res.Retries, Edited: l.Edited,
 		})
 	}
 	r.Store.SaveJob(store.JobRow{ID: j.id, State: j.state})
 	j.broadcast(Event{Type: "done", Job: j.id})
+	for ch := range j.watchers { // the job is over: end every stream
+		close(ch)
+		delete(j.watchers, ch)
+	}
 	j.mu.Unlock()
 	r.log().Info("job finished", "job", j.id, "video", j.meta.VideoID, "languages", len(j.order), "state", j.state, "seconds", time.Since(start).Seconds())
 }
@@ -238,11 +247,14 @@ func (r *Runner) get(id string) (*job, error) {
 		}
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.jobs == nil {
 		r.jobs = map[string]*job{}
 	}
+	if existing, ok := r.jobs[id]; ok { // loaded by another request meanwhile
+		return existing, nil
+	}
 	r.jobs[id] = j
-	r.mu.Unlock()
 	return j, nil
 }
 

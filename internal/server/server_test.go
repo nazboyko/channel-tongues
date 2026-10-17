@@ -95,11 +95,48 @@ func TestSecurityChecks(t *testing.T) {
 
 func TestTooManyWrongCodes(t *testing.T) {
 	h := newHarness(t)
-	for i := 0; i < 20; i++ {
-		h.do("GET", "/health", "", map[string]string{"Authorization": "Bearer NOPE"})
+	for i := 0; i < 30; i++ { // requests with no code at all (a web page firing at the port) do not count
+		h.do("GET", "/health", "", map[string]string{"Authorization": ""}).Body.Close()
 	}
-	if r := h.do("GET", "/health", "", nil); r.StatusCode != 429 {
-		t.Fatalf("after 20 wrong codes even the right one waits: %d", r.StatusCode)
+	if r := h.do("GET", "/health", "", map[string]string{"Authorization": "Bearer NOPE"}); r.StatusCode != 401 {
+		t.Fatalf("bare requests must not trigger the limit: %d", r.StatusCode)
+	}
+	for i := 0; i < 20; i++ {
+		h.do("GET", "/health", "", map[string]string{"Authorization": "Bearer NOPE"}).Body.Close()
+	}
+	if r := h.do("GET", "/health", "", map[string]string{"Authorization": "Bearer NOPE"}); r.StatusCode != 429 {
+		t.Fatalf("after 20 wrong codes a wrong code waits: %d", r.StatusCode)
+	}
+	if r := h.do("GET", "/health", "", nil); r.StatusCode != 200 {
+		t.Fatalf("the right code always gets in: %d", r.StatusCode)
+	}
+}
+
+func TestConcurrentPublishesDoNotLoseLanguages(t *testing.T) {
+	h := newHarness(t)
+	start := func(langs string) string {
+		var job map[string]string
+		decode(t, h.do("POST", "/jobs", `{"videoId":"mockPorch02","languages":[`+langs+`]}`, nil), &job)
+		readEvents(t, h.do("GET", "/jobs/"+job["jobId"]+"/events", "", nil))
+		return job["jobId"]
+	}
+	a, b := start(`"es"`), start(`"de"`)
+	done := make(chan int, 2)
+	for _, id := range []string{a, b} {
+		go func(id string, lang string) {
+			r := h.do("POST", "/jobs/"+id+"/publish", `{"languages":["`+lang+`"]}`, nil)
+			r.Body.Close()
+			done <- r.StatusCode
+		}(id, map[string]string{a: "es", b: "de"}[id])
+	}
+	<-done
+	<-done
+	locs := h.s.Svc.Fake.Localizations("mockPorch02")
+	if _, ok := locs["es"]; !ok {
+		t.Fatalf("es lost: %v", locs)
+	}
+	if _, ok := locs["de"]; !ok {
+		t.Fatalf("de lost: %v", locs)
 	}
 }
 

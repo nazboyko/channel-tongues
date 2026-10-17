@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/nazboyko/channel-tongues/internal/core"
 	"github.com/nazboyko/channel-tongues/internal/jobs"
@@ -44,7 +46,6 @@ type Server struct {
 
 	mu       sync.Mutex
 	failures []time.Time
-	login    *youtube.Login
 }
 
 // New builds a server around a service.
@@ -165,17 +166,19 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if s.blocked() {
-			writeErr(w, http.StatusTooManyRequests, "pair", "Too many wrong codes. Wait a minute, then enter the code the helper printed.")
-			return
-		}
 		given := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(normalizeCode(given)), []byte(normalizeCode(s.Pairing))) != 1 {
-			s.fail()
-			writeErr(w, http.StatusUnauthorized, "pair", "Enter the code the helper printed.")
+		if subtle.ConstantTimeCompare([]byte(normalizeCode(given)), []byte(normalizeCode(s.Pairing))) == 1 {
+			next.ServeHTTP(w, r) // the right code always gets in
 			return
 		}
-		next.ServeHTTP(w, r)
+		if given != "" {
+			if s.blocked() {
+				writeErr(w, http.StatusTooManyRequests, "pair", "Too many wrong codes. Wait a minute, then enter the code the helper printed.")
+				return
+			}
+			s.fail() // only wrong codes count, so a page firing bare requests cannot lock the panel out
+		}
+		writeErr(w, http.StatusUnauthorized, "pair", "Enter the code the helper printed.")
 	})
 }
 
@@ -236,11 +239,17 @@ func (s *Server) apiFailure(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusConflict, "nolanguage", "Set this video's language first: in Studio, Details > Show more > Title and description language.")
 	case errors.Is(err, jobs.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "nojob", "That translation is no longer here. Translate again.")
+	case errors.Is(err, youtube.ErrVideoChanged):
+		writeErr(w, http.StatusConflict, "changed", "The video's translations changed while you were working. Nothing was written; press Publish again.")
+	case errors.Is(err, core.ErrNotOwner):
+		writeErr(w, http.StatusConflict, "owner", "Sign in with the channel that owns this video: open Keep these words below, then Add another channel.")
+	case errors.As(err, &ae) && ae.Code == http.StatusUnauthorized:
+		writeErr(w, http.StatusConflict, "signin", "Your sign-in has expired. Sign in again.")
 	case errors.As(err, &ae):
 		writeErr(w, http.StatusBadGateway, "youtube", ae.Msg)
 	default:
 		s.Svc.Log.Warn("request failed", "err", err)
-		writeErr(w, http.StatusInternalServerError, "error", sentence(err.Error()))
+		writeErr(w, http.StatusInternalServerError, "error", "Something went wrong. Try again; the details are in the helper's log.")
 	}
 }
 
@@ -248,7 +257,8 @@ func sentence(msg string) string {
 	if msg == "" {
 		return "Something went wrong. Try again."
 	}
-	msg = strings.ToUpper(msg[:1]) + msg[1:]
+	r, size := utf8.DecodeRuneInString(msg)
+	msg = string(unicode.ToUpper(r)) + msg[size:]
 	if !strings.HasSuffix(msg, ".") {
 		msg += "."
 	}
@@ -325,7 +335,8 @@ func (s *Server) video(w http.ResponseWriter, r *http.Request) {
 		Languages: []langRef{}, StudioURL: "https://studio.youtube.com/video/" + v.ID + "/translations",
 	}
 	for _, code := range v.Languages() {
-		resp.Languages = append(resp.Languages, langRef{Code: code, Name: langs.Name(code)})
+		c := langs.Canonical(code) // pt and pt-BR are the same language to the panel
+		resp.Languages = append(resp.Languages, langRef{Code: c, Name: langs.Name(c)})
 	}
 	resp.Suggested = s.suggested(v.ChannelID, v.DefaultLanguage)
 	resp.Shown = []string{}
@@ -625,6 +636,8 @@ func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 		replace[c] = true
 	}
 	ctx := r.Context()
+	unlock := s.Svc.LockVideo(snap.VideoID)
+	defer unlock()
 	v, _, err := s.Svc.GetVideo(ctx, snap.VideoID)
 	if err != nil {
 		s.apiFailure(w, err)
@@ -632,10 +645,10 @@ func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 	}
 	writer, err := s.Svc.Writer(ctx, v)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "owner", sentence(err.Error()))
+		s.apiFailure(w, err)
 		return
 	}
-	v, plan, err := writer.Prepare(ctx, v.ID, ours, replace)
+	v, plan, err := writer.PrepareFrom(v, ours, replace)
 	if err != nil {
 		s.apiFailure(w, err)
 		return
@@ -681,6 +694,8 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	unlock := s.Svc.LockVideo(id)
+	defer unlock()
 	v, _, err := s.Svc.GetVideo(ctx, id)
 	if err != nil {
 		s.apiFailure(w, err)
@@ -688,7 +703,7 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 	}
 	writer, err := s.Svc.Writer(ctx, v)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "owner", sentence(err.Error()))
+		s.apiFailure(w, err)
 		return
 	}
 	res, err := writer.Restore(ctx, id, req.BackupID)
@@ -794,14 +809,11 @@ func (s *Server) authURL(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "setup", "Run tongues setup in a terminal first; it walks you through connecting your Google project.")
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	login, err := s.Svc.Auth.StartLogin(context.Background())
 	if err != nil {
 		s.apiFailure(w, err)
 		return
 	}
-	s.login = login
 	go func() {
 		ch, err := login.Wait(context.Background())
 		if err != nil {

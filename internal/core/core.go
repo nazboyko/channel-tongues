@@ -21,6 +21,9 @@ import (
 	"github.com/nazboyko/channel-tongues/internal/youtube/fake"
 )
 
+// ErrNotOwner means no signed-in channel owns the video, so it cannot be written.
+var ErrNotOwner = errors.New("sign in with the channel that owns this video first")
+
 // Service holds the pieces one process needs.
 type Service struct {
 	Cfg     *config.Config
@@ -35,6 +38,25 @@ type Service struct {
 	logFile io.Closer
 	mu      sync.Mutex
 	mock    MockState
+	writing map[string]*sync.Mutex
+}
+
+// LockVideo serializes writes to one video inside this process: a publish
+// plans from what it read, and two at once would delete each other's
+// languages. (Across processes, the re-read before every write catches it.)
+func (s *Service) LockVideo(videoID string) func() {
+	s.mu.Lock()
+	if s.writing == nil {
+		s.writing = map[string]*sync.Mutex{}
+	}
+	m, ok := s.writing[videoID]
+	if !ok {
+		m = &sync.Mutex{}
+		s.writing[videoID] = m
+	}
+	s.mu.Unlock()
+	m.Lock()
+	return m.Unlock
 }
 
 // MockState lets tests and screenshots force the states the panel shows.
@@ -178,7 +200,7 @@ func (s *Service) Writer(ctx context.Context, v *youtube.Video) (*youtube.Writer
 		}
 	}
 	if owner == "" {
-		return nil, fmt.Errorf("sign in with the channel that owns this video first: tongues auth")
+		return nil, ErrNotOwner
 	}
 	client, err := s.ClientFor(ctx, owner)
 	if err != nil {

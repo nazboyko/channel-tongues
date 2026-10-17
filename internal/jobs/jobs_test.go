@@ -19,8 +19,10 @@ func newRunner(t *testing.T, delay time.Duration) (*Runner, *store.Store) {
 	}
 	t.Cleanup(func() { st.Close() })
 	r := &Runner{
-		Store:  st,
-		Engine: func(context.Context) *translate.Engine { return &translate.Engine{Model: translate.NewFakeModel(delay)} },
+		Store: st,
+		Engine: func(context.Context) *translate.Engine {
+			return &translate.Engine{Model: translate.NewFakeModel(delay)}
+		},
 	}
 	return r, st
 }
@@ -121,5 +123,22 @@ func TestEditAndReload(t *testing.T) {
 	}
 	if _, err := r2.Get("unknown"); err != ErrNotFound {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestEditDuringARunIsKept(t *testing.T) {
+	r, st := newRunner(t, 200*time.Millisecond)
+	id := r.Start(rain, []string{"es"}, Meta{VideoID: "mockRain001"})
+	time.Sleep(20 * time.Millisecond)
+	if _, err := r.Edit(id, "es", "Mi título", "Mi descripción"); err != nil {
+		t.Fatal(err)
+	}
+	s := waitDone(t, r, id)
+	if s.Languages[0].Title != "Mi título" || !s.Languages[0].Edited {
+		t.Fatalf("the person's edit must survive the end of the job: %+v", s.Languages[0])
+	}
+	_, rows, _, _ := st.LoadJob(id)
+	if rows[0].Title != "Mi título" || !rows[0].Edited {
+		t.Fatalf("stored: %+v", rows[0])
 	}
 }
