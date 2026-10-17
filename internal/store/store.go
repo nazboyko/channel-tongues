@@ -256,3 +256,84 @@ func (s *Store) History(videoID string) (map[string]HistoryEntry, error) {
 	}
 	return out, rows.Err()
 }
+
+// JobRow is a translation job as stored.
+type JobRow struct {
+	ID                string
+	VideoID           string
+	CreatedAt         string
+	State             string
+	SourceLang        string
+	SourceTitle       string
+	SourceDescription string
+	Languages         string // comma-separated
+}
+
+// TranslationRow is one language of a job as stored.
+type TranslationRow struct {
+	JobID       string
+	Lang        string
+	Status      string
+	Title       string
+	Description string
+	Note        string
+	Seconds     float64
+	Retries     int
+	Edited      bool
+}
+
+// SaveJob inserts or updates a job.
+func (s *Store) SaveJob(j JobRow) error {
+	if j.CreatedAt == "" {
+		j.CreatedAt = now()
+	}
+	_, err := s.db.Exec(`INSERT INTO jobs (id, video_id, created_at, state, source_lang, source_title, source_description, languages)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET state = excluded.state`,
+		j.ID, j.VideoID, j.CreatedAt, j.State, j.SourceLang, j.SourceTitle, j.SourceDescription, j.Languages)
+	return err
+}
+
+// SaveTranslation inserts or updates one language of a job.
+func (s *Store) SaveTranslation(t TranslationRow) error {
+	edited := 0
+	if t.Edited {
+		edited = 1
+	}
+	_, err := s.db.Exec(`INSERT INTO translations (job_id, lang, status, title, description, note, seconds, retries, edited, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(job_id, lang) DO UPDATE SET status = excluded.status, title = excluded.title,
+			description = excluded.description, note = excluded.note, seconds = excluded.seconds,
+			retries = excluded.retries, edited = excluded.edited, updated_at = excluded.updated_at`,
+		t.JobID, t.Lang, t.Status, t.Title, t.Description, t.Note, t.Seconds, t.Retries, edited, now())
+	return err
+}
+
+// LoadJob reads a job and its translations; ok is false when it is unknown.
+func (s *Store) LoadJob(id string) (JobRow, []TranslationRow, bool, error) {
+	var j JobRow
+	err := s.db.QueryRow(`SELECT id, video_id, created_at, state, source_lang, source_title, source_description, languages FROM jobs WHERE id = ?`, id).
+		Scan(&j.ID, &j.VideoID, &j.CreatedAt, &j.State, &j.SourceLang, &j.SourceTitle, &j.SourceDescription, &j.Languages)
+	if errors.Is(err, sql.ErrNoRows) {
+		return j, nil, false, nil
+	}
+	if err != nil {
+		return j, nil, false, err
+	}
+	rows, err := s.db.Query(`SELECT job_id, lang, status, title, description, note, seconds, retries, edited FROM translations WHERE job_id = ?`, id)
+	if err != nil {
+		return j, nil, false, err
+	}
+	defer rows.Close()
+	var ts []TranslationRow
+	for rows.Next() {
+		var t TranslationRow
+		var edited int
+		if err := rows.Scan(&t.JobID, &t.Lang, &t.Status, &t.Title, &t.Description, &t.Note, &t.Seconds, &t.Retries, &edited); err != nil {
+			return j, nil, false, err
+		}
+		t.Edited = edited == 1
+		ts = append(ts, t)
+	}
+	return j, ts, true, rows.Err()
+}
