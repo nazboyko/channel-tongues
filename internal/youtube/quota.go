@@ -9,9 +9,9 @@ import (
 
 // API costs in quota units, from the YouTube Data API reference.
 const (
-	CostRead    = 1  // videos.list, channels.list, playlistItems.list, i18nLanguages.list
-	CostUpdate  = 50 // videos.update
-	CostPublish = CostUpdate + 2*CostRead
+	CostRead    = 1                       // videos.list, channels.list, playlistItems.list, i18nLanguages.list
+	CostUpdate  = 50                      // videos.update
+	CostPublish = CostUpdate + 3*CostRead // read, re-read just before writing, update, read back
 
 	// DailyLimit is the default free quota; DailyBudget leaves room for reads.
 	DailyLimit  = 10000

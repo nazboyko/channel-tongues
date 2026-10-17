@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nazboyko/channel-tongues/internal/store"
 )
 
 // Backup is the state of a video's title, description and translations taken
@@ -25,6 +27,9 @@ type Backup struct {
 	Snippet       json.RawMessage         `json:"snippet"`
 	Localizations map[string]Localization `json:"localizations"`
 	Planned       map[string]Localization `json:"planned,omitempty"`
+	// History is what Channel Tongues had written to the video before this
+	// write, so an undo can give those languages back to it.
+	History map[string]store.HistoryEntry `json:"history,omitempty"`
 }
 
 // BackupInfo is one line of a backup listing.

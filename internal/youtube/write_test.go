@@ -221,3 +221,78 @@ func TestAPIRefusalKeepsTheBackup(t *testing.T) {
 		t.Fatalf("the backup exists and nothing was written: %+v", res)
 	}
 }
+
+func TestStalePlanIsRefused(t *testing.T) {
+	w, _, _ := newWriter(t)
+	ctx := context.Background()
+	va, planA, _ := w.Prepare(ctx, "mockPorch02", map[string]Localization{"es": {"Linterna", "d"}}, nil)
+	vb, planB, _ := w.Prepare(ctx, "mockPorch02", map[string]Localization{"de": {"Laterne", "d"}}, nil)
+	if _, err := w.Publish(ctx, va, planA, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Publish(ctx, vb, planB, ""); !errors.Is(err, ErrVideoChanged) {
+		t.Fatalf("a plan made before another publish must be refused, got %v", err)
+	}
+	if list, _ := w.Backups.List("mockPorch02"); len(list) != 1 {
+		t.Fatalf("the refused publish leaves no backup, got %d", len(list))
+	}
+}
+
+func TestUndoOfASecondPublishGivesTheFirstBack(t *testing.T) {
+	w, _, api := newWriter(t)
+	ctx := context.Background()
+	publish := func(title string) *PublishResult {
+		t.Helper()
+		v, plan, err := w.Prepare(ctx, "mockPorch02", map[string]Localization{"es": {title, "d"}}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := w.Publish(ctx, v, plan, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	publish("Uno")
+	second := publish("Dos")
+	if _, err := w.Restore(ctx, "mockPorch02", second.BackupID); err != nil {
+		t.Fatal(err)
+	}
+	if got := api.Localizations("mockPorch02")["es"]["title"]; got != "Uno" {
+		t.Fatalf("undo puts the first text back, got %q", got)
+	}
+	h, _ := w.Store.History("mockPorch02")
+	if h["es"].Title != "Uno" {
+		t.Fatalf("the first text is ours again: %+v", h)
+	}
+	_, plan, _ := w.Prepare(ctx, "mockPorch02", map[string]Localization{"es": {"Tres", "d"}}, nil)
+	if plan.Changes[0].Outcome != OutcomeUpdated {
+		t.Fatalf("a later publish updates it, got %s", plan.Changes[0].Outcome)
+	}
+}
+
+func TestUndoKeepsALanguageAddedInStudioMeanwhile(t *testing.T) {
+	w, c, api := newWriter(t)
+	ctx := context.Background()
+	v, plan, _ := w.Prepare(ctx, "mockPorch02", map[string]Localization{"es": {"Linterna", "d"}}, nil)
+	res, err := w.Publish(ctx, v, plan, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Someone adds Italian in Studio after the publish.
+	now, _ := c.GetLocalizations(ctx, "mockPorch02")
+	now["it"] = Localization{"Lanterna", "d"}
+	if err := c.UpdateLocalizations(ctx, "mockPorch02", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Restore(ctx, "mockPorch02", res.BackupID); err != nil {
+		t.Fatal(err)
+	}
+	after := api.Localizations("mockPorch02")
+	if _, ok := after["es"]; ok {
+		t.Fatal("undo removes what the publish added")
+	}
+	if after["it"]["title"] != "Lanterna" {
+		t.Fatalf("undo keeps what was added in Studio since: %v", after)
+	}
+}

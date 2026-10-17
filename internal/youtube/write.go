@@ -143,6 +143,10 @@ type PublishResult struct {
 	Wrote    bool     `json:"wrote"`
 }
 
+// ErrVideoChanged means the video's translations changed between reading and
+// writing (another tab, or the command line, published at the same time).
+var ErrVideoChanged = errors.New("the video's translations changed while you were working; nothing was written, try again")
+
 // ErrNoDefaultLanguage is returned when the video has no language set for its
 // title and description; YouTube refuses translations then.
 var ErrNoDefaultLanguage = errors.New("this video has no language set for its title and description. In Studio open the video, then Details > Show more > Title and description language, pick it and save")
@@ -153,6 +157,12 @@ func (w *Writer) Prepare(ctx context.Context, videoID string, ours map[string]Lo
 	if err != nil {
 		return nil, nil, err
 	}
+	return w.PrepareFrom(v, ours, replace)
+}
+
+// PrepareFrom plans the merge from a video that was just read.
+func (w *Writer) PrepareFrom(v *Video, ours map[string]Localization, replace map[string]bool) (*Video, *Plan, error) {
+	videoID := v.ID
 	if v.DefaultLanguage == "" {
 		return v, nil, ErrNoDefaultLanguage
 	}
@@ -189,9 +199,22 @@ func (w *Writer) Publish(ctx context.Context, v *Video, plan *Plan, jobID string
 			planned[c.Key] = plan.Merged[c.Key]
 		}
 	}
+	// Read again right before writing: if anything changed since the plan was
+	// made, sending the plan's complete map would delete those changes.
+	fresh, err := w.Client.GetLocalizations(ctx, v.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !equalMaps(fresh, plan.Existing) {
+		return nil, ErrVideoChanged
+	}
+	history, err := w.Store.History(v.ID)
+	if err != nil {
+		return nil, err
+	}
 	backupID, err := w.Backups.Write(Backup{
 		VideoID: v.ID, ChannelID: v.ChannelID, Reason: "publish", JobID: jobID,
-		Snippet: v.Snippet, Localizations: v.Localizations, Planned: planned,
+		Snippet: v.Snippet, Localizations: v.Localizations, Planned: planned, History: history,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not write the backup, so nothing was published: %w", err)
@@ -209,9 +232,11 @@ func (w *Writer) Publish(ctx context.Context, v *Video, plan *Plan, jobID string
 	}
 	for i, c := range res.Changes {
 		switch c.Outcome {
-		case OutcomeAdded, OutcomeUpdated, OutcomeReplaced:
+		case OutcomeAdded, OutcomeUpdated, OutcomeReplaced, OutcomeSame:
 			if got, ok := after[c.Key]; !ok || got != plan.Merged[c.Key] {
-				res.Changes[i].Outcome = OutcomeFailed
+				if c.Outcome != OutcomeSame {
+					res.Changes[i].Outcome = OutcomeFailed
+				}
 				continue
 			}
 			l := plan.Merged[c.Key]
@@ -223,8 +248,11 @@ func (w *Writer) Publish(ctx context.Context, v *Video, plan *Plan, jobID string
 	return res, nil
 }
 
-// Restore writes a backup's translations back as the complete map, behind the
-// same guards: a backup of the current state first, a read-back after.
+// Restore undoes the write a backup was taken for: each language that write
+// set goes back to its value in the backup (or is removed if the video did
+// not have it), and everything else on the video stays as it is now. It runs
+// behind the same guards: a backup of the current state first, a read-back
+// after.
 func (w *Writer) Restore(ctx context.Context, videoID, backupID string) (*PublishResult, error) {
 	bk, err := w.Backups.Read(videoID, backupID)
 	if err != nil {
@@ -239,9 +267,33 @@ func (w *Writer) Restore(ctx context.Context, videoID, backupID string) (*Publis
 	if err != nil {
 		return nil, err
 	}
-	target := bk.Localizations
-	if target == nil {
-		target = map[string]Localization{}
+	before := bk.Localizations
+	if before == nil {
+		before = map[string]Localization{}
+	}
+	target := map[string]Localization{}
+	touched := map[string]bool{}
+	if len(bk.Planned) > 0 {
+		for k, l := range v.Localizations {
+			target[k] = l
+		}
+		for key := range bk.Planned {
+			touched[key] = true
+			if l, had := before[key]; had {
+				target[key] = l
+			} else {
+				delete(target, key)
+			}
+		}
+	} else {
+		// A backup without a plan (taken before a language setting change):
+		// put the whole map back.
+		for k, l := range before {
+			target[k] = l
+		}
+		for _, k := range unionKeys(v.Localizations, before) {
+			touched[k] = true
+		}
 	}
 	res := &PublishResult{VideoID: videoID}
 	for _, code := range unionKeys(v.Localizations, target) {
@@ -261,9 +313,13 @@ func (w *Writer) Restore(ctx context.Context, videoID, backupID string) (*Publis
 	if equalMaps(v.Localizations, target) {
 		return res, nil
 	}
+	history, err := w.Store.History(videoID)
+	if err != nil {
+		return nil, err
+	}
 	newID, err := w.Backups.Write(Backup{
 		VideoID: videoID, ChannelID: v.ChannelID, Reason: "restore " + backupID,
-		Snippet: v.Snippet, Localizations: v.Localizations, Planned: target,
+		Snippet: v.Snippet, Localizations: v.Localizations, Planned: changedKeys(v.Localizations, target), History: history,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not write the backup, so nothing was restored: %w", err)
@@ -277,24 +333,40 @@ func (w *Writer) Restore(ctx context.Context, videoID, backupID string) (*Publis
 	if err != nil {
 		return res, fmt.Errorf("restored, but reading it back failed: %w", err)
 	}
-	if !equalMaps(after, target) {
-		for i := range res.Changes {
-			c := res.Changes[i]
-			if after[c.Key] != target[c.Key] {
-				res.Changes[i].Outcome = OutcomeFailed
-			}
+	for i := range res.Changes {
+		c := res.Changes[i]
+		got, has := after[c.Key]
+		want, keep := target[c.Key]
+		if has != keep || got != want {
+			res.Changes[i].Outcome = OutcomeFailed
 		}
 	}
-	history, err := w.Store.History(videoID)
-	if err != nil {
-		return res, err
-	}
-	for lang, h := range history {
-		if l, ok := after[lang]; !ok || l.Title != h.Title || l.Description != h.Description {
+	// History follows the text on the video: what we wrote before the undone
+	// publish is ours again; anything else is forgotten.
+	for lang := range touched {
+		l, ok := after[lang]
+		switch snap, inSnap := bk.History[lang]; {
+		case ok && inSnap && snap.Title == l.Title && snap.Description == l.Description:
+			w.Store.RecordHistory(videoID, snap)
+		default:
 			w.Store.ForgetHistory(videoID, lang)
 		}
 	}
 	return res, nil
+}
+
+// changedKeys lists the languages whose value differs between two maps, with
+// the new value (or an empty one for a removal), as a backup's plan.
+func changedKeys(from, to map[string]Localization) map[string]Localization {
+	out := map[string]Localization{}
+	for _, k := range unionKeys(from, to) {
+		a, inA := from[k]
+		b, inB := to[k]
+		if inA != inB || a != b {
+			out[k] = b
+		}
+	}
+	return out
 }
 
 // SetDefaultLanguage sets the language of the title and description. It is
