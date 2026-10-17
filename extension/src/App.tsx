@@ -14,6 +14,7 @@ import {
 } from "./lib/api";
 import { screenFor, type HealthResult } from "./lib/state";
 import { isStudio, videoIdFromUrl } from "./lib/url";
+import { askStudioAccess, readFromStudio, type StudioFields } from "./lib/studio";
 import {
   CopyButton,
   CopyCode,
@@ -84,6 +85,7 @@ interface Draft {
 export function App() {
   const [health, setHealth] = useState<HealthResult>({ kind: "pending" });
   const [tabVideo, setTabVideo] = useState<string | null>(overrideVideo);
+  const [tabId, setTabId] = useState<number | null>(null);
   const [pickedVideo, setPickedVideo] = useState<string | null>(null);
   const [pasteMode, setPasteMode] = useState(false);
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -127,7 +129,9 @@ export function App() {
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         windowId = tab?.windowId;
-        setTabVideo(isStudio(tab?.url) ? videoIdFromUrl(tab?.url) : null);
+        const id = isStudio(tab?.url) ? videoIdFromUrl(tab?.url) : null;
+        setTabVideo(id);
+        setTabId(id && tab?.id !== undefined ? tab.id : null);
       } catch {
         setTabVideo(null);
       }
@@ -267,6 +271,8 @@ export function App() {
     case "paste":
       return (
         <PasteScreen
+          key={tabId ?? "none"}
+          studioTab={tabId}
           languages={languages}
           footer={footer}
           onTranslate={(title, description, codes) => startJob({ title, description, languages: codes }, null, [])}
@@ -549,6 +555,7 @@ function chipLangs(codes: string[], languages: Language[], has: (code: string) =
 
 /* Level 0: paste the text */
 function PasteScreen(props: {
+  studioTab: number | null;
   languages: Language[];
   onTranslate: (title: string, description: string, codes: string[]) => Promise<void>;
   footer: ReactNode;
@@ -560,6 +567,21 @@ function PasteScreen(props: {
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filled, setFilled] = useState<"no" | "yes" | "ask">("no");
+  const fill = (f: StudioFields | null) => {
+    if (!f) return false;
+    setTitle(f.title);
+    setDescription(f.description);
+    setFilled("yes");
+    return true;
+  };
+  // On a Studio video page, read the two fields so there is nothing to paste.
+  useEffect(() => {
+    if (props.studioTab === null) return;
+    readFromStudio(props.studioTab).then((f) => {
+      if (!fill(f)) setFilled("ask");
+    });
+  }, [props.studioTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const chosen = selected ?? new Set(popular);
   const codes = [...popular, ...extra];
   const toggle = (c: string) => {
@@ -571,8 +593,20 @@ function PasteScreen(props: {
   const count = codes.filter((c) => chosen.has(c)).length;
   return (
     <Shell footer={props.footer}>
-      <Heading>Paste the title and description</Heading>
-      <p>Copy them from the video's Details page in Studio.</p>
+      <Heading>{filled === "yes" ? "Check the title and description" : "Paste the title and description"}</Heading>
+      <p>{filled === "yes" ? "Filled in from the Studio page. Change anything, then translate." : "Copy them from the video's Details page in Studio."}</p>
+      {filled === "ask" && props.studioTab !== null && (
+        <button
+          className="link"
+          onClick={async () => {
+            if ((await askStudioAccess()) && props.studioTab !== null && !fill(await readFromStudio(props.studioTab))) {
+              setError("The title was not found on this page. Paste it instead.");
+            }
+          }}
+        >
+          Read them from the Studio page
+        </button>
+      )}
       <input className="field" aria-label="Title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <textarea
         className="field"

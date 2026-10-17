@@ -25,6 +25,17 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["sidePanel", "tabs", "storage"],
-  "host_permissions": ["http://127.0.0.1:7312/*"]
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:7312/*"
+  ],
+  "optional_host_permissions": [
+    "https://studio.youtube.com/*"
+  ]
 }
