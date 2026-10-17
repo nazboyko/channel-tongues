@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // scripted answers per language in order; the last answer repeats.
@@ -317,5 +318,23 @@ func TestEngineRecordsEveryCall(t *testing.T) {
 	}
 	if !res[0].Calls[4].Kind.ReadBack() || res[0].Calls[2].Kind.ReadBack() || res[0].Calls[4].Stats.PromptTokens != 300 {
 		t.Fatalf("got %+v", res[0].Calls)
+	}
+}
+
+// The prompt states the title limit and the original's length in the
+// characters the model sees: "#sleep" goes back in place of ⟦1⟧, three
+// characters longer, so the limit is three lower.
+func TestTitleLimitLeavesRoomForPlaceholders(t *testing.T) {
+	m := &scripted{answers: map[string][]func(Request) (Output, error){
+		"es": {answer("Lluvia en la ventana de una cabaña · 3 horas ⟦1⟧", "Lluvia suave toda la noche.\n\n⟦2⟧ Empieza la lluvia\nMás en ⟦3⟧")},
+	}}
+	(&Engine{Model: m}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
+	req := m.requests[0]
+	if req.TitleLimit != MaxTitle-5-3 {
+		t.Fatalf("limit %d", req.TitleLimit)
+	}
+	p := SystemPrompt("en", "es", "rain", req.TitleLimit, utf8.RuneCountInString(req.Source.Title))
+	if !strings.Contains(p, "at most 92 characters; the original title has 36.") || !strings.Contains(p, "never the main subject") {
+		t.Fatalf("prompt: %s", p)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // ModelState is what the helper knows about the local model.
@@ -304,7 +305,7 @@ func truncateBytes(b []byte, n int) string {
 // problem, the conversation continues so the model fixes exactly that.
 func (o *Ollama) Translate(ctx context.Context, req Request) (Output, Stats, error) {
 	messages := []chatMessage{
-		{Role: "system", Content: SystemPrompt(req.SourceLang, req.Lang, req.Kind)},
+		{Role: "system", Content: SystemPrompt(req.SourceLang, req.Lang, req.Kind, req.TitleLimit, utf8.RuneCountInString(req.Source.Title))},
 		{Role: "user", Content: UserMessage(req.Source)},
 	}
 	if req.Previous != nil && req.Problem != nil {

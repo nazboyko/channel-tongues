@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nazboyko/channel-tongues/internal/langs"
 )
@@ -17,6 +18,7 @@ type Request struct {
 	SourceLang string
 	Kind       string
 	Source     Output   // protected source fields
+	TitleLimit int      // characters the protected title may use, so the restored one fits YouTube's 100
 	Previous   *Output  // the answer that failed a check, for a retry
 	Problem    *Problem // what was wrong with it
 }
@@ -214,7 +216,10 @@ func (e *Engine) one(ctx context.Context, src Source, protSrc Output, prot *Prot
 	if retries <= 0 {
 		retries = 2
 	}
-	req := Request{Lang: lang, SourceLang: src.Language, Kind: kind, Source: protSrc}
+	// The limit leaves 5 characters spare, like the retry feedback, and counts
+	// each placeholder as it is written: a link or hashtag put back is longer.
+	limit := MaxTitle - 5 - (utf8.RuneCountInString(src.Title) - utf8.RuneCountInString(protSrc.Title))
+	req := Request{Lang: lang, SourceLang: src.Language, Kind: kind, Source: protSrc, TitleLimit: limit}
 	var last Output
 	var lastProblem *Problem
 	answered := false

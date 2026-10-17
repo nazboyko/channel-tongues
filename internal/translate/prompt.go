@@ -78,27 +78,35 @@ func firstSentence(s string) string {
 	return ""
 }
 
-// SystemPrompt is the fixed, calm style every translation follows.
-func SystemPrompt(sourceLang, lang, kind string) string {
+// SystemPrompt is the fixed, calm style every translation follows. The
+// title limit and the original title's length come first, in the characters
+// the model sees (a placeholder counts as written), so it shortens a long
+// title on the first answer instead of after a retry.
+func SystemPrompt(sourceLang, lang, kind string, titleLimit, titleLen int) string {
 	target := langs.EnglishName(lang)
 	source := langs.EnglishName(sourceLang)
 	if sourceLang == "" {
 		source = "the original language"
 	}
+	if titleLimit <= 0 {
+		titleLimit = MaxTitle - 5
+	}
 	return fmt.Sprintf(`You translate a YouTube video's title and description from %s into %s, for viewers in %s.
+
+The title must be at most %d characters; the original title has %d. If your title would be longer, leave out its least important words, never the main subject.
 
 What the video is (for context only; do not copy it into the title): %s
 
 Rules:
 - Keep every placeholder such as ⟦1⟧ exactly as written, each one exactly once, in the matching place. They stand for links, hashtags, handles, timestamps and names that must not change.
 - The description comes as a list of lines. Translate each line on its own and return exactly as many lines, in the same order. An empty line stays empty.
-- Title: translate the title and nothing else, part for part, at most 95 characters. Never move words from the description into the title, even when the title is short. Use the words a creator in %s would use, so a viewer searching in %s finds it. Capitalize it the way titles are normally written in %s, not in English title case.
+- Title: translate the title and nothing else, part for part, within that length. Never move words from the description into the title, even when the title is short. Use the words a creator in %s would use, so a viewer searching in %s finds it. Capitalize it the way titles are normally written in %s, not in English title case.
 - Translate the meaning, not word by word, in a calm, natural tone.
-- Add nothing and drop nothing: no new claims, keywords, hashtags or emoji.
+- Add nothing and drop nothing (only title words left out to fit the length): no new claims, keywords, hashtags or emoji.
 - Keep emoji and the separators between title parts (such as · or |) as they are.
 - No exclamation marks unless the original has them.
 - Reply with JSON only: {"title": "...", "lines": ["...", "..."]}`,
-		source, target, market(lang), kind, market(lang), target, target)
+		source, target, market(lang), titleLimit, titleLen, kind, market(lang), target, target)
 }
 
 // wire is the shape sent to and received from the model: the description as
