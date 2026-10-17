@@ -87,12 +87,12 @@ func SystemPrompt(sourceLang, lang, kind string) string {
 	}
 	return fmt.Sprintf(`You translate a YouTube video's title and description from %s into %s, for viewers in %s.
 
-What the video is: %s
+What the video is (for context only; do not copy it into the title): %s
 
 Rules:
 - Keep every placeholder such as ⟦1⟧ exactly as written, each one exactly once, in the matching place. They stand for links, hashtags, handles, timestamps and names that must not change.
 - The description comes as a list of lines. Translate each line on its own and return exactly as many lines, in the same order. An empty line stays empty.
-- Title: at most 95 characters. Write it the way a creator in %s would title this video, so a viewer searching in %s finds it. Capitalize it the way titles are normally written in %s, not in English title case.
+- Title: translate the title and nothing else, part for part, at most 95 characters. Never move words from the description into the title, even when the title is short. Use the words a creator in %s would use, so a viewer searching in %s finds it. Capitalize it the way titles are normally written in %s, not in English title case.
 - Translate the meaning, not word by word, in a calm, natural tone.
 - Add nothing and drop nothing: no new claims, keywords, hashtags or emoji.
 - Keep emoji and the separators between title parts (such as · or |) as they are.

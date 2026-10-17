@@ -140,3 +140,35 @@ func TestScriptShareIgnoresPlaceholdersAndDigits(t *testing.T) {
 		t.Fatalf("no letters means nothing to judge, got %v", s)
 	}
 }
+
+func TestTitleThatBorrowsFromTheDescription(t *testing.T) {
+	src := Output{Title: "night cabin 30s", Description: "The Slow Night Hours - quiet night scenes and soft music for deep sleep."}
+	cases := []struct {
+		lang, title, reason string
+	}{
+		// Seen on a real test video: the model copied the description's first sentence into the title.
+		{"es", "cabina nocturna 30s · escenas nocturnas tranquilas y música suave para dormir profundamente.", "adds a part"},
+		{"de", "Nacht in der Hütte 30s ruhige Nachtszenen und sanfte Musik für tiefen Schlaf", "much longer"},
+		{"ja", "夜の山小屋 30秒 静かな夜の風景と深い眠りのための穏やかな音楽をお届けします", "much longer"},
+		{"es", "cabina nocturna 30s", ""},
+		{"de", "Nachthütte 30s", ""},
+		{"ja", "夜の山小屋 30秒", ""},
+	}
+	for _, tc := range cases {
+		p := checkTitleGrowth(src.Title, tc.title, tc.lang)
+		switch {
+		case tc.reason == "" && p != nil:
+			t.Errorf("%s %q: unexpected %q", tc.lang, tc.title, p.Reason)
+		case tc.reason != "" && (p == nil || !strings.Contains(p.Reason, tc.reason)):
+			t.Errorf("%s %q: want %q, got %v", tc.lang, tc.title, tc.reason, p)
+		}
+	}
+	// A long title with parts translates fine.
+	long := "Rain on a Cabin Window at Night · 3 Hours of Sleep Sounds"
+	if p := checkTitleGrowth(long, "Lluvia en la ventana de una cabaña por la noche · 3 horas de sonidos para dormir", "es"); p != nil {
+		t.Fatalf("normal Spanish growth flagged: %s", p.Reason)
+	}
+	if p := checkTitleGrowth(long, "夜の山小屋の窓に降る雨 · 3時間の睡眠用サウンド", "ja"); p != nil {
+		t.Fatalf("normal Japanese flagged: %s", p.Reason)
+	}
+}

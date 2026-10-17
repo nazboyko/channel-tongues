@@ -45,6 +45,7 @@ func Check(src Output, out Output, spans []Span, lang string) *Problem {
 		func() *Problem { return checkAddedSpans(out) },
 		func() *Problem { return checkBrackets(src, out, spans) },
 		func() *Problem { return checkTitleLength(out.Title, spans) },
+		func() *Problem { return checkTitleGrowth(src.Title, out.Title, lang) },
 		func() *Problem { return checkDescriptionLength(out.Description, spans) },
 		func() *Problem { return checkAngles(out, spans) },
 		func() *Problem { return checkTranslated(src.Title, out.Title, lang) },
@@ -226,6 +227,49 @@ func checkTitleLength(title string, spans []Span) *Problem {
 
 // checkDescriptionLength: YouTube limits descriptions to 5,000 bytes, so a
 // description in Thai or Hindi reaches the limit sooner than in English.
+// titleSeparators split a title into parts ("Rain · 3 Hours | Sleep").
+const titleSeparators = "·|•—–"
+
+// noSpaceScripts are written without spaces between words.
+var noSpaceScripts = map[langs.Script]bool{langs.Japanese: true, langs.Han: true, langs.Thai: true, langs.Lao: true, langs.Khmer: true, langs.Myanmar: true}
+
+// checkTitleGrowth catches a title that borrows from the description: a new
+// part after a separator, or far more words than the original has.
+func checkTitleGrowth(src, out, lang string) *Problem {
+	count := func(s string) int {
+		n := 0
+		for _, r := range s {
+			if strings.ContainsRune(titleSeparators, r) {
+				n++
+			}
+		}
+		return n
+	}
+	if count(out) > count(src) {
+		return &Problem{
+			Reason:   "the title adds a part the original does not have",
+			Feedback: "The title has more parts than the original. Translate only the title, part for part; add nothing from the description.",
+		}
+	}
+	srcText, outText := stripPlaceholders(src), stripPlaceholders(out)
+	l, _ := langs.Get(lang)
+	var grown bool
+	if noSpaceScripts[l.Script] {
+		srcN, outN := utf8.RuneCountInString(strings.Join(strings.Fields(srcText), "")), utf8.RuneCountInString(strings.Join(strings.Fields(outText), ""))
+		grown = outN > max(srcN, 12)*3/2+8
+	} else {
+		srcN, outN := len(strings.Fields(srcText)), len(strings.Fields(outText))
+		grown = outN > (srcN*8+4)/5+2 // about 1.6 times the words, plus two
+	}
+	if !grown {
+		return nil
+	}
+	return &Problem{
+		Reason:   "the title is much longer than the original, so it may add words",
+		Feedback: "The title is much longer than the original. Translate only the words of the title; add nothing from the description.",
+	}
+}
+
 func checkDescriptionLength(desc string, spans []Span) *Problem {
 	p := Protected{Spans: spans}
 	if n := len(p.Restore(desc)); n <= MaxDescription {
