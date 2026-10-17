@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +42,36 @@ type API struct {
 	// DropOnUpdate, when set, makes the next update silently drop this language
 	// so a read-back mismatch can be tested.
 	DropOnUpdate string
+	// path, when set, keeps the videos in a file so that separate runs of the
+	// command line see each other's changes in mock mode.
+	path string
+}
+
+// NewPersistent is New with the videos kept in a JSON file at path.
+func NewPersistent(path string) *API {
+	a := New()
+	a.path = path
+	if b, err := os.ReadFile(path); err == nil {
+		var saved map[string]map[string]any
+		if json.Unmarshal(b, &saved) == nil {
+			for id, v := range saved {
+				if _, known := a.videos[id]; known {
+					a.videos[id] = v
+				}
+			}
+		}
+	}
+	return a
+}
+
+// save writes the videos to the file; the caller holds a.mu.
+func (a *API) save() {
+	if a.path == "" {
+		return
+	}
+	if b, err := json.Marshal(a.videos); err == nil {
+		os.WriteFile(a.path, b, 0o600)
+	}
 }
 
 // New loads the bundled fixtures.
@@ -252,6 +283,7 @@ func (a *API) updateVideo(w http.ResponseWriter, r *http.Request, body map[strin
 		}
 		v["localizations"] = stored
 	}
+	a.save()
 	writeJSON(w, pick(v, want))
 }
 

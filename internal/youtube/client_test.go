@@ -185,3 +185,6 @@ func TestNilLedgerIsSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// fakeAPIRef gives write tests direct access to the fake's switches.
+type fakeAPIRef struct{ *fake.API }
