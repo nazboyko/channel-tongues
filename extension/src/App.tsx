@@ -623,7 +623,11 @@ function PasteScreen(props: {
     else next.add(c);
     setSelected(next);
   };
-  const count = codes.filter((c) => chosen.has(c)).length;
+  // Pasted text is read back in English, so English itself is not a target.
+  const allCodes = props.languages.map((l) => l.code).filter((c) => c.split("-")[0] !== "en");
+  const allOn = allCodes.length > 0 && allCodes.every((c) => chosen.has(c));
+  const picked = [...props.languages.map((l) => l.code), ...codes].filter((c, i, list) => chosen.has(c) && list.indexOf(c) === i);
+  const count = picked.length;
   return (
     <Shell footer={props.footer}>
       <Heading>{filled === "yes" ? "Check the title and description" : "Paste the title and description"}</Heading>
@@ -653,7 +657,12 @@ function PasteScreen(props: {
         <h2 style={{ fontSize: 14, margin: 0 }}>Translate into</h2>
         <span className="n">{count} selected</span>
       </div>
-      <LanguageChips langs={chipLangs(codes, props.languages, () => false)} selected={chosen} onToggle={toggle} />
+      <LanguageChips
+        langs={chipLangs(codes, props.languages, () => false)}
+        selected={chosen}
+        onToggle={toggle}
+        all={{ on: allOn, count: allCodes.length, onToggle: () => setSelected(new Set(allOn ? popular : allCodes)) }}
+      />
       <MoreLanguages
         all={props.languages}
         shown={new Set(codes)}
@@ -674,11 +683,7 @@ function PasteScreen(props: {
           setBusy(true);
           setError("");
           props
-            .onTranslate(
-              title,
-              description,
-              codes.filter((c) => chosen.has(c)),
-            )
+            .onTranslate(title, description, picked)
             .catch((e) => {
               setError(messageOf(e));
               setBusy(false);
@@ -756,7 +761,14 @@ function VideoScreen(props: {
 
   const has = (c: string) => video.languages.some((l) => l.code === c);
   const codes = [...video.shown, ...extra.filter((c) => !video.shown.includes(c))];
-  const count = codes.filter((c) => selected.has(c)).length;
+  const base = (c: string) => c.split("-")[0].toLowerCase();
+  const isSource = (c: string) => !!video.defaultLanguage && base(c) === base(video.defaultLanguage);
+  // Every language the video does not have yet (the "All languages" action
+  // never replaces a translation that is already there).
+  const allCodes = props.languages.map((l) => l.code).filter((c) => !isSource(c) && !has(c));
+  const allOn = allCodes.length > 0 && allCodes.every((c) => selected.has(c));
+  const chosen = [...props.languages.map((l) => l.code), ...codes].filter((c, i, list) => selected.has(c) && !isSource(c) && list.indexOf(c) === i);
+  const count = chosen.length;
   const summary = `${video.sourceName || "No language set"} · ${
     video.languages.length === 0 ? "no translations yet" : `has ${plural(video.languages.length, "language")}`
   }`;
@@ -796,9 +808,19 @@ function VideoScreen(props: {
           {count} selected
         </span>
       </div>
-      <LanguageChips langs={chipLangs(codes, props.languages, has)} selected={selected} onToggle={toggle} />
+      <LanguageChips
+        langs={chipLangs(codes, props.languages, has)}
+        selected={selected}
+        onToggle={toggle}
+        all={{
+          on: allOn,
+          count: allCodes.length,
+          onToggle: () =>
+            setSelected(new Set(allOn ? props.languages.filter((l) => l.popular && !isSource(l.code) && !has(l.code)).map((l) => l.code) : allCodes)),
+        }}
+      />
       <MoreLanguages
-        all={props.languages.filter((l) => l.code !== video.defaultLanguage && !l.code.startsWith(video.defaultLanguage + "-"))}
+        all={props.languages.filter((l) => !isSource(l.code))}
         shown={new Set(codes)}
         onAdd={(c) => {
           setExtra([...extra, c]);
@@ -819,10 +841,7 @@ function VideoScreen(props: {
           setBusy(true);
           setStartError("");
           props
-            .onTranslate(
-              video,
-              codes.filter((c) => selected.has(c)),
-            )
+            .onTranslate(video, chosen)
             .catch((e) => {
               setStartError(messageOf(e));
               setBusy(false);
@@ -873,6 +892,47 @@ function StatusText(props: { lang: JobLang }) {
 function TranslatingScreen(props: { job: Job | null; onCancel: () => void; footer: ReactNode }) {
   const langs = props.job?.languages ?? [];
   const finished = langs.filter((l) => ["ready", "check", "failed"].includes(l.status)).length;
+  if (langs.length > 20) {
+    // Many languages: one bar instead of a long list of rows.
+    const current = langs.find((l) => l.status === "translating") ?? langs.find((l) => l.status === "checking");
+    const spoken = finished === langs.length ? finished : Math.floor(finished / 10) * 10;
+    return (
+      <Shell footer={props.footer}>
+        <Heading>Translating</Heading>
+        <p>{finished === 0 ? "Warming up the model. The first run takes a few seconds longer." : "Each language is checked before you see it."}</p>
+        <div className="progress">
+          <div
+            className="bar"
+            role="progressbar"
+            aria-label="Languages translated"
+            aria-valuemin={0}
+            aria-valuemax={langs.length}
+            aria-valuenow={finished}
+            aria-valuetext={`${finished} of ${langs.length}`}
+          >
+            <span style={{ width: `${(100 * finished) / langs.length}%` }} />
+          </div>
+          <div className="meta">
+            <span aria-hidden="true">
+              {finished} of {langs.length}
+            </span>
+            {current && (
+              <span>
+                Now: <span lang={current.code}>{current.name}</span>
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="sr-only" aria-live="polite">
+          {/* Spoken every ten languages, not on each one. */}
+          {spoken > 0 && `${spoken} of ${langs.length} translated`}
+        </p>
+        <button className="secondary push" onClick={props.onCancel}>
+          Cancel
+        </button>
+      </Shell>
+    );
+  }
   return (
     <Shell footer={props.footer}>
       <Heading>Translating</Heading>
@@ -927,6 +987,8 @@ function ReviewScreen(props: {
     Object.fromEntries(usable.map((l) => [l.code, { title: l.title, description: l.description }])),
   );
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [focusId, setFocusId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -969,9 +1031,110 @@ function ReviewScreen(props: {
     }
   };
 
+  useEffect(() => {
+    // Opening a row moves focus into its card; folding it moves focus back.
+    if (focusId) document.getElementById(focusId)?.focus();
+  }, [focusId, expanded]);
+  const toggleRow = (code: string, open: boolean) => {
+    const next = new Set(expanded);
+    if (open) next.add(code);
+    else next.delete(code);
+    setExpanded(next);
+    setFocusId(open ? `t-${code}` : `o-${code}`);
+  };
+
   const count = ticked.size;
   const toCheck = usable.filter((l) => l.status === "check").length;
   const allTicked = usable.length > 0 && usable.every((l) => ticked.has(l.code));
+  const tickAll = () => setTicked(allTicked ? new Set() : new Set(usable.map((l) => l.code)));
+  // With many languages, the ones to check come first as full cards and the
+  // ready ones fold into one row each; with a dozen it looks as before.
+  const many = usable.length > 20;
+  const checks = usable.filter((l) => l.status === "check");
+  const readies = usable.filter((l) => l.status === "ready");
+  const card = (l: JobLang) => {
+    const d = draftOf(l);
+    const titleId = `t-${l.code}`;
+    const counterId = `c-${l.code}`;
+    return (
+      <section className="card" key={l.code} aria-label={l.english}>
+        <div className="h">
+          <span lang={l.code}>{l.name}</span>
+          <label>
+            <span className="sr-only">Publish {l.english}</span>
+            <input
+              type="checkbox"
+              checked={ticked.has(l.code)}
+              onChange={(e) => {
+                const next = new Set(ticked);
+                if (e.target.checked) next.add(l.code);
+                else next.delete(l.code);
+                setTicked(next);
+              }}
+            />
+          </label>
+        </div>
+        {l.status === "check" && <div className="warn">⚠ Check this one: {l.note}.</div>}
+        <input
+          id={titleId}
+          className="field"
+          lang={l.code}
+          aria-label={`${l.english} title`}
+          aria-describedby={counterId}
+          value={d.title}
+          onChange={(e) => setDrafts({ ...drafts, [l.code]: { ...d, title: e.target.value } })}
+          onBlur={() => dirty(l) && save(l.code)}
+        />
+        <TitleCounter id={counterId} title={d.title} />
+        <ReadsAs
+          sourceName={props.sourceName}
+          title={l.backTitle}
+          line={l.backLine}
+          added={l.added}
+          addedLine={l.addedLine}
+          stale={l.edited || d.title !== l.title}
+        />
+        <textarea
+          className="field"
+          lang={l.code}
+          aria-label={`${l.english} description`}
+          rows={4}
+          value={d.description}
+          onChange={(e) => setDrafts({ ...drafts, [l.code]: { ...d, description: e.target.value } })}
+          onBlur={() => dirty(l) && save(l.code)}
+        />
+        {d.error && (
+          <div className="error" role="alert">
+            {d.error}
+          </div>
+        )}
+        <button
+          className="link"
+          aria-expanded={showOriginal.has(l.code)}
+          onClick={() => {
+            const next = new Set(showOriginal);
+            if (next.has(l.code)) next.delete(l.code);
+            else next.add(l.code);
+            setShowOriginal(next);
+          }}
+        >
+          {showOriginal.has(l.code) ? "Hide original" : "Show original"}
+        </button>
+        {showOriginal.has(l.code) && (
+          <div className="original">
+            {props.job.sourceTitle}
+            {"\n\n"}
+            {props.job.sourceDescription}
+          </div>
+        )}
+        {many && expanded.has(l.code) && (
+          <button className="link" aria-expanded="true" aria-label={`Show less of ${l.english}`} onClick={() => toggleRow(l.code, false)}>
+            Show less
+          </button>
+        )}
+      </section>
+    );
+  };
   return (
     <Shell footer={props.footer}>
       {props.video && (
@@ -981,99 +1144,70 @@ function ReviewScreen(props: {
         </div>
       )}
       <Heading>Look it over</Heading>
-      <div className="sect">
+      {many ? (
+        // "71 ready, 14 to check · Tick all": one line, the link right after it.
         <p>
-          {usable.length === 0
-            ? "Nothing could be translated this time."
-            : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
-        </p>
-        {usable.length > 1 && (
-          <button
-            className="link nowrap"
-            onClick={() => setTicked(allTicked ? new Set() : new Set(usable.map((l) => l.code)))}
-          >
+          {`${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""} · `}
+          <button className="link" onClick={tickAll}>
             {allTicked ? "Untick all" : "Tick all"}
           </button>
-        )}
-      </div>
-      {usable.map((l) => {
-        const d = draftOf(l);
-        const titleId = `t-${l.code}`;
-        const counterId = `c-${l.code}`;
-        return (
-          <section className="card" key={l.code} aria-label={l.english}>
-            <div className="h">
-              <span lang={l.code}>{l.name}</span>
-              <label>
-                <span className="sr-only">Publish {l.english}</span>
-                <input
-                  type="checkbox"
-                  checked={ticked.has(l.code)}
-                  onChange={(e) => {
-                    const next = new Set(ticked);
-                    if (e.target.checked) next.add(l.code);
-                    else next.delete(l.code);
-                    setTicked(next);
-                  }}
-                />
-              </label>
-            </div>
-            {l.status === "check" && <div className="warn">⚠ Check this one: {l.note}.</div>}
-            <input
-              id={titleId}
-              className="field"
-              lang={l.code}
-              aria-label={`${l.english} title`}
-              aria-describedby={counterId}
-              value={d.title}
-              onChange={(e) => setDrafts({ ...drafts, [l.code]: { ...d, title: e.target.value } })}
-              onBlur={() => dirty(l) && save(l.code)}
-            />
-            <TitleCounter id={counterId} title={d.title} />
-            <ReadsAs
-              sourceName={props.sourceName}
-              title={l.backTitle}
-              line={l.backLine}
-              added={l.added}
-              addedLine={l.addedLine}
-              stale={l.edited || d.title !== l.title}
-            />
-            <textarea
-              className="field"
-              lang={l.code}
-              aria-label={`${l.english} description`}
-              rows={4}
-              value={d.description}
-              onChange={(e) => setDrafts({ ...drafts, [l.code]: { ...d, description: e.target.value } })}
-              onBlur={() => dirty(l) && save(l.code)}
-            />
-            {d.error && (
-              <div className="error" role="alert">
-                {d.error}
-              </div>
-            )}
-            <button
-              className="link"
-              aria-expanded={showOriginal.has(l.code)}
-              onClick={() => {
-                const next = new Set(showOriginal);
-                if (next.has(l.code)) next.delete(l.code);
-                else next.add(l.code);
-                setShowOriginal(next);
-              }}
-            >
-              {showOriginal.has(l.code) ? "Hide original" : "Show original"}
+        </p>
+      ) : (
+        <div className="sect">
+          <p>
+            {usable.length === 0
+              ? "Nothing could be translated this time."
+              : `${props.job.ready} ready${toCheck > 0 ? `, ${toCheck} to check` : ""}. Edit anything, then publish.`}
+          </p>
+          {usable.length > 1 && (
+            <button className="link nowrap" onClick={tickAll}>
+              {allTicked ? "Untick all" : "Tick all"}
             </button>
-            {showOriginal.has(l.code) && (
-              <div className="original">
-                {props.job.sourceTitle}
-                {"\n\n"}
-                {props.job.sourceDescription}
-              </div>
-            )}
-          </section>
-        );
-      })}
+          )}
+        </div>
+      )}
+      {many ? (
+        <>
+          {checks.map(card)}
+          {readies.length > 0 && (
+            <ul className="rows compact" aria-label="Ready languages">
+              {readies.map((l) =>
+                expanded.has(l.code) ? (
+                  <li key={l.code} className="expanded">
+                    {card(l)}
+                  </li>
+                ) : (
+                  <li key={l.code} className="row compact-row">
+                    <input
+                      type="checkbox"
+                      checked={ticked.has(l.code)}
+                      aria-label={`Publish ${l.english}`}
+                      onChange={(e) => {
+                        const next = new Set(ticked);
+                        if (e.target.checked) next.add(l.code);
+                        else next.delete(l.code);
+                        setTicked(next);
+                      }}
+                    />
+                    <button id={`o-${l.code}`} className="compact-open" aria-expanded="false" onClick={() => toggleRow(l.code, true)}>
+                      <span className="cname" lang={l.code}>
+                        {l.name}
+                      </span>
+                      <span className="ctitle" lang={l.code}>
+                        {draftOf(l).title}
+                      </span>
+                      <ReadsAs inline sourceName={props.sourceName} title={l.backTitle} line={l.backLine} added={l.added} addedLine={l.addedLine} />
+                      <span className="sr-only">, open to edit</span>
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+          )}
+        </>
+      ) : (
+        usable.map(card)
+      )}
       {failed.length > 0 && (
         <>
           <p>Could not translate: {failed.map((l) => l.name).join(", ")}.</p>

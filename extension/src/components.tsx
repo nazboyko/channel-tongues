@@ -26,15 +26,17 @@ export function ReadsAs(props: {
   added?: string[];
   addedLine?: string[];
   stale?: boolean;
+  inline?: boolean; // inside a button, where a paragraph is not allowed
 }) {
   if (!props.title) return null;
   const joiner = /[.!?。！？]$/.test(props.title.trim()) ? " " : ". ";
   const text = props.line ? `${props.title.trim()}${joiner}${props.line}` : props.title;
   const marked = (props.added?.length ?? 0) > 0;
+  const Tag = props.inline ? "span" : "p";
   // Two lines when nothing is marked; in full when words are marked, so no
   // mark is ever cut off. Screen readers get the whole text either way.
   return (
-    <p className={marked ? "reads marked" : "reads"} title={marked ? undefined : text}>
+    <Tag className={marked ? "reads marked" : "reads"} title={marked ? undefined : text}>
       Reads in {props.sourceName} as:{" "}
       {markWords(text, props.added).map((part, i) =>
         part.added ? (
@@ -50,7 +52,7 @@ export function ReadsAs(props: {
         <span className="desc-adds"> · description adds: {props.addedLine.map((w) => w.toLowerCase()).join(", ")}</span>
       )}
       {props.stale && <span className="stale"> (before your edit)</span>}
-    </p>
+    </Tag>
   );
 }
 
@@ -147,7 +149,13 @@ export interface ChipLang {
   has: boolean; // the video already has it
 }
 
-export function LanguageChips(props: { langs: ChipLang[]; selected: Set<string>; onToggle: (code: string) => void }) {
+export function LanguageChips(props: {
+  langs: ChipLang[];
+  selected: Set<string>;
+  onToggle: (code: string) => void;
+  /** The "All languages" quick action: on when every language is ticked. */
+  all?: { on: boolean; count: number; onToggle: () => void };
+}) {
   return (
     <div className="chips" role="group" aria-label="Languages to translate into">
       {props.langs.map((l) => {
@@ -160,6 +168,12 @@ export function LanguageChips(props: { langs: ChipLang[]; selected: Set<string>;
           </button>
         );
       })}
+      {props.all && (
+        <button className="chip all" aria-pressed={props.all.on} onClick={props.all.onToggle}>
+          All languages
+          {!props.all.on && <span className="tag">{props.all.count}</span>}
+        </button>
+      )}
     </div>
   );
 }

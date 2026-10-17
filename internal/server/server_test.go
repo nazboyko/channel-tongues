@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"encoding/json"
+	"github.com/nazboyko/channel-tongues/internal/langs"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,6 +174,17 @@ func TestVideoAndUploads(t *testing.T) {
 	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
 	if len(v.Suggested) != 3 || len(v.Shown) != 13 || v.Shown[12] != "it" {
 		t.Fatalf("remembered selection: suggested %v shown %v", v.Suggested, v.Shown)
+	}
+	// After "All languages" the selection is remembered, but the chips stay
+	// the twelve instead of a wall of 160.
+	var all []string
+	for _, l := range langs.All("en") {
+		all = append(all, l.Code)
+	}
+	h.s.Svc.Store.SetSetting("lastLanguages:UCmockSlowNightHours01", strings.Join(all, ","))
+	decode(t, h.do("GET", "/video/mockRain001", "", nil), &v)
+	if len(v.Suggested) != len(all) || len(v.Shown) != 12 {
+		t.Fatalf("remembered all: suggested %d shown %v", len(v.Suggested), v.Shown)
 	}
 	r := h.do("GET", "/video/notarealid", "", nil)
 	if r.StatusCode != 400 {

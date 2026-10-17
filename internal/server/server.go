@@ -341,7 +341,11 @@ func (s *Server) video(w http.ResponseWriter, r *http.Request) {
 	resp.Suggested = s.suggested(v.ChannelID, v.DefaultLanguage)
 	resp.Shown = []string{}
 	seen := map[string]bool{}
-	for _, c := range append(append([]string(nil), langs.Popular...), resp.Suggested...) {
+	shown := append([]string(nil), langs.Popular...)
+	if len(resp.Suggested) <= 20 { // after "All languages" the chips stay the twelve; that chip shows the rest
+		shown = append(shown, resp.Suggested...)
+	}
+	for _, c := range shown {
 		if !seen[c] && !langs.SameBase(c, v.DefaultLanguage) {
 			seen[c] = true
 			resp.Shown = append(resp.Shown, c)
