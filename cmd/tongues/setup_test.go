@@ -93,3 +93,30 @@ func TestInstallClientFileRefusesWebClients(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestSetupOffersTheLargerModelWithEnoughMemory(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{DataDir: filepath.Join(dir, "data"), OllamaURL: ollamaStub(t, `{"models":[{"name":"gemma4:e4b"}]}`), Port: 7312}
+	var pulled []string
+	var out bytes.Buffer
+	env := &setupEnv{
+		in:     bufio.NewReader(strings.NewReader("y\nn\n")), // yes to the larger model, no Google project
+		out:    &out,
+		open:   func(string) error { return nil },
+		memory: func() int { return 64 },
+		pull:   func(ctx context.Context, model string) error { pulled = append(pulled, model); return nil },
+	}
+	if err := setup(context.Background(), cfg, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(pulled) != 1 || pulled[0] != "gemma4:26b" || !strings.Contains(out.String(), "64 GB of memory") {
+		t.Fatalf("pulled %v, output:\n%s", pulled, out.String())
+	}
+	// With little memory there is no question.
+	out.Reset()
+	env = &setupEnv{in: bufio.NewReader(strings.NewReader("n\n")), out: &out, open: func(string) error { return nil }, memory: func() int { return 16 }}
+	setup(context.Background(), cfg, env)
+	if strings.Contains(out.String(), "larger") {
+		t.Fatalf("no offer on a 16 GB machine:\n%s", out.String())
+	}
+}

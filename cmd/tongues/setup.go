@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,15 @@ type setupEnv struct {
 	poll      time.Duration
 	// install writes the native messaging host manifest (nil: skipped).
 	install func(dirs []string) ([]string, error)
+	// memory returns the computer's memory in GB (nil: unknown).
+	memory func() int
+}
+
+func (e *setupEnv) memoryGB() int {
+	if e.memory == nil {
+		return 0
+	}
+	return e.memory()
 }
 
 func runSetup(cfg *config.Config, args []string) error {
@@ -56,6 +67,7 @@ func runSetup(cfg *config.Config, args []string) error {
 		},
 		poll:    2 * time.Second,
 		install: installNativeHost,
+		memory:  systemMemoryGB,
 	}
 	if *noBrowser {
 		env.open = func(string) error { return errors.New("not opening") }
@@ -127,6 +139,14 @@ func setup(ctx context.Context, cfg *config.Config, e *setupEnv) error {
 		}
 		if state == translate.ModelReady {
 			e.say("Ready: %s.", o.Model)
+			if o.Model != translate.Preferred[0] && cfg.Model == "" && e.memoryGB() >= 32 &&
+				e.ask(fmt.Sprintf("This computer has %d GB of memory. The larger %s (an 18 GB download, once) translates better at about the same speed. Download it too?", e.memoryGB(), translate.Preferred[0]), false) {
+				if err := e.pull(ctx, translate.Preferred[0]); err != nil {
+					e.say("The download did not finish; %s keeps working.", o.Model)
+				} else {
+					e.say("Ready: %s. Channel Tongues uses it from now on.", translate.Preferred[0])
+				}
+			}
 			break
 		}
 		if state == translate.ModelDown {
@@ -283,4 +303,29 @@ func extensionDir() string {
 		}
 	}
 	return ""
+}
+
+// systemMemoryGB reads the installed memory: sysctl on macOS, /proc/meminfo on Linux.
+func systemMemoryGB() int {
+	switch runtime.GOOS {
+	case "darwin":
+		out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+		if err != nil {
+			return 0
+		}
+		n, _ := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+		return int(n >> 30)
+	case "linux":
+		b, err := os.ReadFile("/proc/meminfo")
+		if err != nil {
+			return 0
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if f := strings.Fields(line); len(f) >= 2 && f[0] == "MemTotal:" {
+				kb, _ := strconv.ParseInt(f[1], 10, 64)
+				return int(kb >> 20)
+			}
+		}
+	}
+	return 0
 }
