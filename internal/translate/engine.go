@@ -471,7 +471,7 @@ func (e *Engine) detect(ctx context.Context, out Output, lang, sourceLang string
 // sameFamily accepts answers the detector often confuses: Malay and
 // Indonesian, Norwegian variants, Filipino and Tagalog.
 func sameFamily(a, b string) bool {
-	groups := [][]string{{"id", "ms"}, {"no", "nb", "nn"}, {"fil", "tl"}, {"hr", "bs", "sr"}}
+	groups := [][]string{{"id", "ms"}, {"no", "nb", "nn"}, {"fil", "tl"}, {"hr", "bs", "sr"}, {"ak", "tw"}} // Twi is a variety of Akan
 	in := func(g []string, c string) bool {
 		for _, x := range g {
 			if langs.SameBase(x, c) {

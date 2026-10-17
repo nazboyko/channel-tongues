@@ -279,3 +279,16 @@ func TestEngineNormalizesWindowsLineEndings(t *testing.T) {
 		t.Fatalf("carriage returns must not reach the model: %q", got.Source.Description)
 	}
 }
+
+func TestSameFamily(t *testing.T) {
+	for _, pair := range [][2]string{{"ms", "id"}, {"nb", "no"}, {"tl", "fil"}, {"sr-Latn", "hr"}, {"ak", "tw"}} {
+		if !sameFamily(pair[0], pair[1]) {
+			t.Errorf("%s and %s are close enough for the language check", pair[0], pair[1])
+		}
+	}
+	for _, pair := range [][2]string{{"zu", "nd"}, {"it", "ie"}, {"fr", "wa"}} {
+		if sameFamily(pair[0], pair[1]) {
+			t.Errorf("%s answering for %s should still be held back", pair[0], pair[1])
+		}
+	}
+}
