@@ -2,9 +2,11 @@ package translate
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +68,28 @@ func TestPickModelPrefersTheLargerGemma(t *testing.T) {
 	o = NewOllama(none.URL, "")
 	if st := o.PickModel(context.Background()); st != ModelMissing || o.Model != Fallback {
 		t.Fatalf("got %v %s", st, o.Model)
+	}
+}
+
+func TestChatCapsTheAnswerLength(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Options map[string]any `json:"options"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		got = body.Options
+		w.Write([]byte(`{"message":{"role":"assistant","content":"{}"},"done":true}`))
+	}))
+	defer srv.Close()
+	o := NewOllama(srv.URL, "gemma4:e4b")
+	text := strings.Repeat("rain ", 100) // 500 characters to translate
+	if _, _, err := o.chat(context.Background(), []chatMessage{{Role: "system", Content: "long instructions " + text}, {Role: "user", Content: text}}, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Twice the text plus room for the JSON: a real answer fits, a runaway
+	// one stops long before the 8192-token context is full.
+	if got["num_predict"] != float64(2*500+256) || got["num_ctx"] != float64(8192) {
+		t.Fatalf("options %v", got)
 	}
 }

@@ -186,6 +186,20 @@ func numCtx(messages []chatMessage) int {
 	return 8192
 }
 
+// numPredict caps the answer at twice the text it answers (in characters)
+// plus room for the JSON around it. A real answer stays far below; a model
+// that loses its way in a language it barely knows otherwise writes until
+// the context is full, which took minutes per language.
+func numPredict(messages []chatMessage) int {
+	runes := 0
+	for _, m := range messages {
+		if m.Role == "user" {
+			runes = len([]rune(m.Content))
+		}
+	}
+	return 2*runes + 256
+}
+
 // chat sends one non-streaming chat request with a JSON schema. It retries
 // once on a connection error.
 func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.RawMessage, temperature float64) (string, Stats, error) {
@@ -197,7 +211,7 @@ func (o *Ollama) chat(ctx context.Context, messages []chatMessage, schema json.R
 		Format:    schema,
 		Think:     false,
 		KeepAlive: "30m",
-		Options:   map[string]any{"num_ctx": n, "temperature": temperature},
+		Options:   map[string]any{"num_ctx": n, "temperature": temperature, "num_predict": numPredict(messages)},
 	})
 	if err != nil {
 		return "", Stats{}, err
