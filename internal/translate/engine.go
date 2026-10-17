@@ -68,6 +68,7 @@ type Result struct {
 	BackLine     string        `json:"backLine,omitempty"`
 	Added        []string      `json:"added,omitempty"`
 	BackDuration time.Duration `json:"-"`
+	BackFailed   bool          `json:"-"`
 	RawBack      Back          `json:"-"` // with placeholders, for recording samples
 }
 
@@ -270,11 +271,26 @@ func (e *Engine) back(ctx context.Context, src Source, protSrc Output, prot *Pro
 	})
 	e.log().Info("back-translation", "lang", r.Lang, "seconds", st.Total.Seconds(), "err", err)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		// The meaning check did not happen: the safe side, as with every check.
+		r.BackFailed = true
+		r.Problems = append(r.Problems, "could not be read back")
+		if r.Status == StatusReady {
+			r.Status = StatusCheck
+			r.Note = "it could not be read back to check its meaning; read it yourself"
+		}
 		return
 	}
 	r.RawBack = bt
 	r.BackTitle = strings.TrimSpace(prot.Restore(bt.Title))
 	r.BackLine = strings.TrimSpace(prot.Restore(bt.Line))
+	// The word test knows English endings and small words only; for other
+	// source languages the line is shown and the person judges it.
+	if src.Language != "" && !langs.SameBase(src.Language, "en") {
+		return
+	}
 	original := Back{Title: protSrc.Title, Line: firstLine(protSrc.Description)}
 	candidates := CandidateWords(original, bt)
 	if len(candidates) == 0 {
@@ -306,7 +322,7 @@ func addedReason(words []string) string {
 	if len(words) == 0 {
 		return ""
 	}
-	return "adds: " + strings.Join(words, ", ")
+	return "adds: " + strings.ToLower(strings.Join(words, ", "))
 }
 
 // detect is the one-word language check for Latin-script targets, where the

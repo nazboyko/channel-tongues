@@ -54,7 +54,7 @@ func TestBackTranslationFlagsAddedWords(t *testing.T) {
 	}
 	res := (&Engine{Model: m, BackTranslate: true}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
 	r := res[0]
-	if r.Status != StatusCheck || r.Note != "adds: Quiet" || !reflect.DeepEqual(r.Added, []string{"Quiet"}) {
+	if r.Status != StatusCheck || r.Note != "adds: quiet" || !reflect.DeepEqual(r.Added, []string{"Quiet"}) {
 		t.Fatalf("got %+v", r)
 	}
 	if r.BackTitle != "Quiet rain on the window of a cabin · 3 hours #sleep" || r.BackLine != "Soft rain all night." {
@@ -106,8 +106,8 @@ func TestBackTranslationOffAndOnFailure(t *testing.T) {
 	}
 	failing := &failingBack{scripted: m}
 	res = (&Engine{Model: failing, BackTranslate: true}).Run(context.Background(), testSource, []string{"es"}, nil, nil)
-	if res[0].Status != StatusReady || res[0].BackTitle != "" {
-		t.Fatalf("a failed back-translation leaves the result as it was: %+v", res[0])
+	if res[0].Status != StatusCheck || !strings.Contains(res[0].Note, "could not be read back") || !res[0].BackFailed {
+		t.Fatalf("a failed back-translation means the meaning was not checked: the safe side: %+v", res[0])
 	}
 }
 
@@ -163,5 +163,53 @@ func TestCandidatesAreJudgedAgainstTheWholeSource(t *testing.T) {
 	}
 	if !reflect.DeepEqual(req.Words, []string{"quiet", "calm"}) {
 		t.Fatalf("candidates %v", req.Words)
+	}
+}
+
+func TestVouchingNeedsRealOriginalWords(t *testing.T) {
+	have := wordSet("A cozy cabin on a quiet night")
+	cases := map[string]bool{
+		"":                 false, // named nothing
+		"the":              false, // only a small word
+		"the cabin":        true,
+		"cabin":            true,
+		"cozy cabin":       true,
+		"stunning cabin":   false, // a word the original does not have
+		"quiet nights":     true,
+		"cabin by the sea": false,
+	}
+	for named, want := range cases {
+		if got := inOriginal(named, have); got != want {
+			t.Errorf("inOriginal(%q) = %v, want %v", named, got, want)
+		}
+	}
+}
+
+func TestNoEndingTricksBetweenDifferentWords(t *testing.T) {
+	for _, tc := range [][2]string{{"Hug a cat", "Huge cat"}, {"a red car", "a red care"}, {"a plan", "a plane"}, {"fire", "fir tree"}} {
+		if got := CandidateWords(Back{Title: tc[0]}, Back{Title: tc[1]}); len(got) == 0 {
+			t.Errorf("%q -> %q: the new word must be a candidate", tc[0], tc[1])
+		}
+	}
+	if got := CandidateWords(Back{Line: "Music created with care"}, Back{Line: "Music they create with care"}); len(got) != 0 {
+		t.Errorf("created/create is the same word, got %v", got)
+	}
+	if got := CandidateWords(Back{Line: "Music they create with care"}, Back{Line: "Music created with care"}); len(got) != 0 {
+		t.Errorf("create/created is the same word, got %v", got)
+	}
+	if got := CandidateWords(Back{Title: "Rain"}, Back{Title: "Rain news"}); !reflect.DeepEqual(got, []string{"news"}) {
+		t.Errorf("news is a word, got %v", got)
+	}
+}
+
+func TestWordTestOnlyForEnglishSources(t *testing.T) {
+	src := Source{Title: "夜の山小屋の窓に降る雨の音", Description: "三時間の雨。", Language: "ja"}
+	m := &scripted{
+		answers: map[string][]func(Request) (Output, error){"es": {answer("Lluvia en la ventana de una cabaña de montaña", "Tres horas de lluvia.")}},
+		backs:   map[string]Back{"es": {Title: "窓に当たる雨の音", Line: "三時間の雨。"}},
+	}
+	res := (&Engine{Model: m, BackTranslate: true}).Run(context.Background(), src, []string{"es"}, nil, nil)
+	if res[0].Status != StatusReady || len(res[0].Added) != 0 || res[0].BackTitle == "" {
+		t.Fatalf("for a Japanese source the line is shown, the word test is skipped: %+v", res[0])
 	}
 }

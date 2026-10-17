@@ -172,3 +172,9 @@ func TestTitleThatBorrowsFromTheDescription(t *testing.T) {
 		t.Fatalf("normal Japanese flagged: %s", p.Reason)
 	}
 }
+
+func TestTitleGrowthSkipsSourcesWithoutSpaces(t *testing.T) {
+	if p := checkTitleGrowth("夜の山小屋の窓に降る雨の音", "Lluvia en la ventana de una cabaña de montaña por la noche", "es"); p != nil {
+		t.Fatalf("a Japanese source has no words to count: %s", p.Reason)
+	}
+}

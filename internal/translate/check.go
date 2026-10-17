@@ -252,6 +252,9 @@ func checkTitleGrowth(src, out, lang string) *Problem {
 		}
 	}
 	srcText, outText := stripPlaceholders(src), stripPlaceholders(out)
+	if writtenWithoutSpaces(srcText) {
+		return nil // words cannot be counted in a source without spaces; the length check still applies
+	}
 	l, _ := langs.Get(lang)
 	var grown bool
 	if noSpaceScripts[l.Script] {
@@ -268,6 +271,22 @@ func checkTitleGrowth(src, out, lang string) *Problem {
 		Reason:   "the title is much longer than the original, so it may add words",
 		Feedback: "The title is much longer than the original. Translate only the words of the title; add nothing from the description.",
 	}
+}
+
+// writtenWithoutSpaces reports whether most letters of s belong to scripts
+// that do not put spaces between words (Japanese, Chinese, Thai, ...).
+func writtenWithoutSpaces(s string) bool {
+	tables := []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar}
+	total, in := 0, 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			total++
+			if unicode.IsOneOf(tables, r) {
+				in++
+			}
+		}
+	}
+	return total > 0 && in*2 > total
 }
 
 func checkDescriptionLength(desc string, spans []Span) *Problem {

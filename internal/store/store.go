@@ -104,7 +104,7 @@ func (s *Store) migrate() error {
 		}
 		if _, err := tx.Exec(migrations[i]); err != nil {
 			tx.Rollback()
-			if strings.Contains(err.Error(), "duplicate column name") {
+			if i == 1 && strings.Contains(err.Error(), "duplicate column name") {
 				// Another process added the columns a moment ago.
 				if _, err := s.db.Exec(`UPDATE schema_version SET version = ?`, i+1); err != nil {
 					return err

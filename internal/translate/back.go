@@ -99,11 +99,8 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, e
 	vouched := map[string]bool{}
 	have := wordSet(original)
 	for _, m := range out.Matches {
-		for _, w := range reWord.FindAllString(strings.ToLower(m.Original), -1) {
-			if s := stem(w); have[s] || have[strings.TrimSuffix(s, "e")] {
-				vouched[strings.ToLower(strings.TrimSpace(m.Word))] = true
-				break
-			}
+		if inOriginal(m.Original, have) {
+			vouched[strings.ToLower(strings.TrimSpace(m.Word))] = true
 		}
 	}
 	var added []string
@@ -113,6 +110,33 @@ func (o *Ollama) NewWords(ctx context.Context, req NewWordsRequest) ([]string, e
 		}
 	}
 	return added, nil
+}
+
+// inOriginal reports whether every meaningful word the model named is in the
+// original (and it named at least one): the model cannot vouch with "the",
+// or with words the original does not have.
+func inOriginal(named string, have map[string]bool) bool {
+	meaningful := 0
+	for _, w := range reWord.FindAllString(strings.ToLower(named), -1) {
+		if stopwords[w] || len([]rune(w)) < 2 {
+			continue
+		}
+		meaningful++
+		if !hasWord(have, w) {
+			return false
+		}
+	}
+	return meaningful > 0
+}
+
+// hasWord looks a word up in a word set, allowing for its ending.
+func hasWord(set map[string]bool, w string) bool {
+	s := stem(w)
+	if set[s] || set[w] {
+		return true
+	}
+	// "created" -> "creat" meets "create"; only for words that had an ending.
+	return (strings.HasSuffix(w, "ed") || strings.HasSuffix(w, "ing")) && set[s+"e"]
 }
 
 // keepListed returns the answers that are on the candidate list, in its order.
@@ -150,7 +174,7 @@ func init() {
 		there here when where what which who whom whose how why all any each every some more most other such
 		only own same very just can will would could should may might must shall not nor but also too yet
 		out off per via upon while during before after again once both few many much one two three
-		new videos video watch channel please let make made get got set put take see seen use used`) {
+		videos video watch channel please let make made get got set put take see seen use used`) {
 		stopwords[w] = true
 	}
 }
@@ -210,7 +234,9 @@ func wordSet(text string) map[string]bool {
 	for _, w := range reWord.FindAllString(strings.ToLower(stripPlaceholders(text)), -1) {
 		s := stem(w)
 		set[s] = true
-		set[strings.TrimSuffix(s, "e")] = true // "create" meets "created" -> "creat"
+		if strings.HasSuffix(w, "ed") || strings.HasSuffix(w, "ing") {
+			set[s+"e"] = true // "created" -> "creat" also stands for "create"
+		}
 		for _, u := range unitStems(w) {
 			set[u] = true
 		}
@@ -236,9 +262,9 @@ func fieldCandidates(original, returned Back) (title, line []string) {
 			lw := strings.ToLower(w)
 			s := stem(lw)
 			switch {
-			case len([]rune(lw)) < 3, stopwords[lw], stopwords[s], isNumber(lw), reUnitNumber.MatchString(lw):
+			case len([]rune(lw)) < 3, stopwords[lw], stopwords[s] && s+"s" == lw, isNumber(lw), reUnitNumber.MatchString(lw):
 				continue
-			case have[s] || have[lw] || have[strings.TrimSuffix(s, "e")]:
+			case hasWord(have, lw):
 				continue
 			case seen[s]:
 				continue
