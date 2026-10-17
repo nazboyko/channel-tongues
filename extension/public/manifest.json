@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Channel Tongues",
+  "version": "0.1.0",
+  "description": "Translate a video's title and description on your own machine and add them to the video.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkjfJxGxOwRK7kLtpe51NnKIiRKigUre3r+EJBFfSXlau2DGUQ6qYoeq4GX2vmXuGUZ4dGL0pWtIwRMT98k9yO09KjSpH3hbNp53EhPOBcZHDZ/Y7d8P85AllpXCyyO/+zfKgPSvgxcrLhkhbra/yvsFVV+Zu2Ois9PNbAtULPqniBmvO8bZ2RedF7QNrnxIGU3hJayK51AtWmZTvDZg+UK+/aA7TE49CO6NvgCNSD90rnGVATNZ8aInDZ7hR9mIaOk7npkmzxzvjwvjkm4g9ohT93ARO7EpMV4wLrF4V0Xt9kckoE2exUreYNBipGWPUAo1QWLCzuXI7faWnmak0XwIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Channel Tongues",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["sidePanel", "tabs", "storage"],
+  "host_permissions": ["http://127.0.0.1:7312/*"]
+}
