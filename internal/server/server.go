@@ -626,6 +626,14 @@ func (s *Server) publish(w http.ResponseWriter, r *http.Request) {
 		replace[c] = true
 	}
 	ctx := r.Context()
+	// The same job twice (a double click) is refused; another job's publish to
+	// this video waits for this one, so neither deletes the other's languages.
+	again, ok := s.Svc.TryLock("publish:" + snap.ID)
+	if !ok {
+		writeBusy(w)
+		return
+	}
+	defer again()
 	unlock := s.Svc.LockVideo(snap.VideoID)
 	defer unlock()
 	v, _, err := s.Svc.GetVideo(ctx, snap.VideoID)
@@ -684,6 +692,12 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	again, ok := s.Svc.TryLock("restore:" + id + ":" + req.BackupID)
+	if !ok {
+		writeBusy(w)
+		return
+	}
+	defer again()
 	unlock := s.Svc.LockVideo(id)
 	defer unlock()
 	v, _, err := s.Svc.GetVideo(ctx, id)
@@ -827,6 +841,12 @@ func (s *Server) signOut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad", "The request was not understood.")
 		return
 	}
+	unlock, ok := s.Svc.TryLock("signout:" + req.ChannelID)
+	if !ok {
+		writeBusy(w)
+		return
+	}
+	defer unlock()
 	if s.Svc.Mock {
 		sw := s.Svc.MockSwitches()
 		sw.Auth = "none"
@@ -849,6 +869,12 @@ func (s *Server) mockState(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Svc.SetMock(m)
 	writeJSON(w, http.StatusOK, m)
+}
+
+// writeBusy refuses a second Publish, Undo or Sign out while the first runs.
+// The panel never sends one (its button waits), so this is the second guard.
+func writeBusy(w http.ResponseWriter) {
+	writeErr(w, http.StatusConflict, "busy", "That is already running. Wait for it to finish.")
 }
 
 // Listen binds 127.0.0.1 only.

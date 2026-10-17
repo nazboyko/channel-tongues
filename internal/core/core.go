@@ -45,24 +45,42 @@ type Service struct {
 // plans from what it read, and two at once would delete each other's
 // languages. (Across processes, the re-read before every write catches it.)
 func (s *Service) LockVideo(videoID string) func() {
+	m := s.lockFor(videoID)
+	m.Lock()
+	return m.Unlock
+}
+
+// TryLock takes the lock for key unless it is held. The helper keys it by
+// the request (the job to publish, the backup to restore, the channel to sign
+// out): a second click that arrives while the first one runs is refused,
+// never run twice.
+func (s *Service) TryLock(key string) (unlock func(), ok bool) {
+	m := s.lockFor(key)
+	if !m.TryLock() {
+		return nil, false
+	}
+	return m.Unlock, true
+}
+
+func (s *Service) lockFor(key string) *sync.Mutex {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.writing == nil {
 		s.writing = map[string]*sync.Mutex{}
 	}
-	m, ok := s.writing[videoID]
+	m, ok := s.writing[key]
 	if !ok {
 		m = &sync.Mutex{}
-		s.writing[videoID] = m
+		s.writing[key] = m
 	}
-	s.mu.Unlock()
-	m.Lock()
-	return m.Unlock
+	return m
 }
 
 // MockState lets tests and screenshots force the states the panel shows.
 type MockState struct {
 	Ollama string `json:"ollama"` // "", "down", "missing"
 	Auth   string `json:"auth"`   // "", "none"
+	Slow   bool   `json:"slow"`   // writes take 1.5 s, to see and test the busy buttons
 }
 
 // Open prepares the data directory. In mock mode it uses <data dir>/mock,
@@ -119,6 +137,13 @@ func (s *Service) SetMock(m MockState) {
 	s.mu.Lock()
 	s.mock = m
 	s.mu.Unlock()
+	if s.Fake != nil {
+		slow := time.Duration(0)
+		if m.Slow {
+			slow = 1500 * time.Millisecond
+		}
+		s.Fake.SetSlowWrites(slow)
+	}
 }
 
 // MockSwitches returns the forced states.

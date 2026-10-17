@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -50,6 +51,16 @@ type API struct {
 	// path, when set, keeps the videos in a file so that separate runs of the
 	// command line see each other's changes in mock mode.
 	path string
+	// slow makes every videos.update take this long, so a second click can
+	// arrive while the first write runs (SetSlowWrites).
+	slow time.Duration
+}
+
+// SetSlowWrites makes every videos.update take d (0 for instant).
+func (a *API) SetSlowWrites(d time.Duration) {
+	a.mu.Lock()
+	a.slow = d
+	a.mu.Unlock()
 }
 
 // NewPersistent is New with the videos kept in a JSON file at path.
@@ -160,6 +171,10 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/videos" && r.Method == http.MethodGet:
 		a.listVideos(w, r)
 	case path == "/videos" && r.Method == http.MethodPut:
+		a.mu.Lock()
+		slow := a.slow
+		a.mu.Unlock()
+		time.Sleep(slow)
 		a.updateVideo(w, r, body)
 	case path == "/channels" && r.Method == http.MethodGet:
 		a.listChannels(w, r)

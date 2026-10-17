@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -344,5 +345,96 @@ func TestPairingCodeFile(t *testing.T) {
 	again, _ := LoadPairing(dir)
 	if again != code {
 		t.Fatal("the code stays the same across restarts")
+	}
+}
+
+// A second Publish or Undo that arrives while the first one runs is refused,
+// and YouTube gets one write, not two.
+func TestDoubleClicksRunOnce(t *testing.T) {
+	h := newHarness(t)
+	var job map[string]string
+	decode(t, h.do("POST", "/jobs", `{"videoId":"mockPorch02","languages":["es"]}`, nil), &job)
+	readEvents(t, h.do("GET", "/jobs/"+job["jobId"]+"/events", "", nil))
+	h.s.Svc.SetMock(core.MockState{Slow: true})
+
+	writes := func() int {
+		n := 0
+		for _, r := range h.s.Svc.Fake.Requests() {
+			if r.Method == http.MethodPut {
+				n++
+			}
+		}
+		return n
+	}
+	// twice sends the same request two times, the second 100 ms after the
+	// first, and returns both statuses and bodies in the order sent.
+	twice := func(path, body string) (codes [2]int, bodies [2]string) {
+		var wg sync.WaitGroup
+		for i := range 2 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				req, _ := http.NewRequest("POST", h.srv.URL+path, strings.NewReader(body))
+				req.Host = "127.0.0.1:7399"
+				req.Header.Set("Authorization", "Bearer abcd-efgh")
+				req.Header.Set("Origin", "chrome-extension://"+ExtensionID)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					return
+				}
+				b, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				codes[i], bodies[i] = resp.StatusCode, string(b)
+			}()
+			time.Sleep(100 * time.Millisecond)
+		}
+		wg.Wait()
+		return codes, bodies
+	}
+
+	before := writes()
+	codes, bodies := twice("/jobs/"+job["jobId"]+"/publish", `{"languages":["es"]}`)
+	if codes != [2]int{200, 409} || !strings.Contains(bodies[1], `"busy"`) {
+		t.Fatalf("publish twice: %v %v", codes, bodies)
+	}
+	if got := writes() - before; got != 1 {
+		t.Fatalf("one publish reaches YouTube, got %d writes", got)
+	}
+	var pub publishResponse
+	json.Unmarshal([]byte(bodies[0]), &pub)
+
+	before = writes()
+	codes, bodies = twice("/videos/mockPorch02/restore", `{"backupId":"`+pub.BackupID+`"}`)
+	if codes != [2]int{200, 409} {
+		t.Fatalf("undo twice: %v %v", codes, bodies)
+	}
+	if got := writes() - before; got != 1 {
+		t.Fatalf("one undo reaches YouTube, got %d writes", got)
+	}
+	if _, ok := h.s.Svc.Fake.Localizations("mockPorch02")["es"]; ok {
+		t.Fatal("the video is back to how it was")
+	}
+	// Once the first is done, the button works again.
+	r := h.do("POST", "/jobs/"+job["jobId"]+"/publish", `{"languages":["es"]}`, nil)
+	r.Body.Close()
+	if r.StatusCode != 200 {
+		t.Fatalf("publish after the first finished: %d", r.StatusCode)
+	}
+
+	// Sign out: a second request while the first holds the channel is refused.
+	unlock, ok := h.s.Svc.TryLock("signout:UCmockSlowNightHours01")
+	if !ok {
+		t.Fatal("lock")
+	}
+	r = h.do("POST", "/auth/signout", `{"channelId":"UCmockSlowNightHours01"}`, nil)
+	r.Body.Close()
+	if r.StatusCode != 409 {
+		t.Fatalf("second sign-out: %d", r.StatusCode)
+	}
+	unlock()
+	r = h.do("POST", "/auth/signout", `{"channelId":"UCmockSlowNightHours01"}`, nil)
+	r.Body.Close()
+	if r.StatusCode != 200 {
+		t.Fatalf("sign-out: %d", r.StatusCode)
 	}
 }
