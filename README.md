@@ -6,6 +6,8 @@ Your channel's titles and descriptions in every language, translated on your own
 
 YouTube already shows viewers abroad a machine translation of your titles, and you never get to read it. Channel Tongues opens next to YouTube Studio as a Chrome side panel; you press Translate, and Gemma 4 running on your computer through Ollama writes the title and description in the twelve languages with the biggest YouTube audiences. You read them over, press Publish, and the helper adds them to the video through the official YouTube Data API after taking a backup.
 
+[Demo video](https://www.youtube.com/watch?v=3xA-Rxhp31k) · [Landing page](https://nazboyko.github.io/channel-tongues/)
+
 ## Install
 
 You need a Mac or Linux machine with Chrome, Go 1.26 and Node 26.
